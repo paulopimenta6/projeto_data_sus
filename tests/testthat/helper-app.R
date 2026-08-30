@@ -1,5 +1,7 @@
 source(testthat::test_path("..", "..", "global.R"), chdir = TRUE)
 
+Sys.setenv(PROJETO_DATASUS_CACHE_DIR = tempfile("projeto-datasus-test-cache-"))
+
 mock_options <- function() {
   list(
     linha = data.frame(

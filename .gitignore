@@ -7,6 +7,7 @@ renv/library/
 renv/staging/
 data/cache/*
 !data/cache/.gitkeep
+tests/testthat/data/cache/
 exports/*
 !exports/.gitkeep
 *.html
