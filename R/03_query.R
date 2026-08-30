@@ -1,0 +1,175 @@
+new_datasus_query <- function(
+  domain,
+  dataset,
+  uf = NULL,
+  geo_level = "state",
+  measure,
+  periods,
+  options,
+  condition_field = NULL,
+  condition_values = character(),
+  territory_field = NULL,
+  territory_values = character(),
+  urgent_only = FALSE,
+  scale = "count"
+) {
+  config <- get_domain_config(domain)
+  if (identical(uf, "all") || identical(uf, "")) uf <- NULL
+
+  if (!is.data.frame(periods) || !all(c("id", "value") %in% names(periods))) {
+    stop("Os períodos devem conter rótulos e valores TABNET.", call. = FALSE)
+  }
+  if (nrow(periods) == 0L) stop("Selecione ao menos um período.", call. = FALSE)
+  if (nrow(periods) > 120L) stop("Selecione no máximo 120 competências.", call. = FALSE)
+
+  filters <- list()
+  append_filter <- function(field, values) {
+    if (is.null(field) || !nzchar(field) || length(values) == 0L) return(invisible(NULL))
+    filters[[field]] <<- unique(c(filters[[field]] %||% character(), as.character(values)))
+    invisible(NULL)
+  }
+  append_filter(condition_field, condition_values)
+  append_filter(territory_field, territory_values)
+
+  query <- list(
+    domain = domain,
+    domain_label = config$label,
+    system = config$system,
+    source_function = config$source_function,
+    frequency = config$frequency,
+    dataset = as.character(dataset),
+    uf = if (is.null(uf)) NULL else toupper(as.character(uf)),
+    geo_level = match.arg(geo_level, c("state", "municipality", "health_region")),
+    measure_label = as.character(measure$id[[1L]]),
+    measure_value = as.character(measure$value[[1L]]),
+    periods = data.frame(
+      id = as.character(periods$id),
+      value = as.character(periods$value),
+      stringsAsFactors = FALSE
+    ),
+    filters = filters,
+    urgent_only = isTRUE(urgent_only),
+    scale = match.arg(scale, c("count", "rate")),
+    options = options,
+    created_at = Sys.time()
+  )
+  class(query) <- c("datasus_query", "list")
+  validate_datasus_query(query)
+  query
+}
+
+validate_datasus_query <- function(query) {
+  required <- c(
+    "domain", "system", "source_function", "dataset", "geo_level",
+    "measure_value", "periods", "filters", "scale"
+  )
+  missing <- setdiff(required, names(query))
+  if (length(missing) > 0L) {
+    stop("Consulta incompleta: ", paste(missing, collapse = ", "), call. = FALSE)
+  }
+  get_domain_config(query$domain)
+  if (!nzchar(query$dataset)) stop("Conjunto de dados inválido.", call. = FALSE)
+  if (!is.list(query$filters) || is.null(names(query$filters)) && length(query$filters) > 0L) {
+    stop("Filtros devem formar uma lista nomeada.", call. = FALSE)
+  }
+  if (query$domain == "sim" && query$geo_level == "state" && !is.null(query$uf)) {
+    stop(
+      "No SIM agregado por UF, deixe a abrangência em Brasil; use municípios para detalhar uma UF.",
+      call. = FALSE
+    )
+  }
+  invisible(query)
+}
+
+extract_year <- function(x) {
+  x <- as.character(x)
+  match <- regexpr("(19|20)[0-9]{2}", x, perl = TRUE)
+  result <- rep(NA_integer_, length(x))
+  has_match <- match > 0L
+  result[has_match] <- as.integer(regmatches(x, match)[has_match])
+  result
+}
+
+query_years <- function(query, periods = query$periods) {
+  years <- extract_year(periods$id)
+  missing <- is.na(years)
+  years[missing] <- extract_year(periods$value[missing])
+  sort(unique(stats::na.omit(years)))
+}
+
+explicit_period_month <- function(x) {
+  vapply(as.character(x), function(value) {
+    year <- extract_year(value)
+    year <- year[[1L]]
+    if (is.na(year)) return(NA_integer_)
+    normalized <- normalize_text(value)
+    month_names <- c(
+      jan = 1L, fev = 2L, mar = 3L, abr = 4L, mai = 5L, jun = 6L,
+      jul = 7L, ago = 8L, set = 9L, out = 10L, nov = 11L, dez = 12L
+    )
+    month <- NA_integer_
+    for (prefix in names(month_names)) {
+      if (grepl(prefix, normalized, fixed = TRUE)) {
+        month <- month_names[[prefix]]
+        break
+      }
+    }
+    if (is.na(month)) {
+      numeric_match <- regexec(
+        "(?:^|[^0-9])([01]?[0-9])[/_-](?:19|20)[0-9]{2}",
+        value,
+        perl = TRUE
+      )
+      pieces <- regmatches(value, numeric_match)[[1L]]
+      if (length(pieces) >= 2L) month <- as.integer(pieces[[2L]])
+    }
+    if (is.na(month) || month < 1L || month > 12L) return(NA_integer_)
+    year * 100L + month
+  }, integer(1))
+}
+
+query_period_weights <- function(query, periods = query$periods) {
+  years <- extract_year(periods$id)
+  missing <- is.na(years)
+  years[missing] <- extract_year(periods$value[missing])
+  years <- years[!is.na(years)]
+  if (length(years) == 0L) {
+    return(data.frame(year = integer(), weight = numeric()))
+  }
+
+  if (query$frequency == "monthly") {
+    counts <- table(years)
+    return(data.frame(
+      year = as.integer(names(counts)),
+      weight = as.numeric(counts) / 12,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  data.frame(year = sort(unique(years)), weight = 1, stringsAsFactors = FALSE)
+}
+
+query_to_manifest <- function(query) {
+  list(
+    domain = query$domain,
+    domain_label = query$domain_label,
+    system = query$system,
+    dataset = query$dataset,
+    uf = query$uf %||% "Brasil",
+    geo_level = query$geo_level,
+    measure = list(label = query$measure_label, value = query$measure_value),
+    periods = unname(split(query$periods, seq_len(nrow(query$periods)))),
+    filters = query$filters,
+    urgent_only = query$urgent_only,
+    scale = query$scale,
+    created_at = format(query$created_at, "%Y-%m-%dT%H:%M:%S%z")
+  )
+}
+
+is_count_measure <- function(label) {
+  normalized <- normalize_text(label)
+  grepl(
+    "obit|intern|aih|caso|notific|quant|qtd|estabelec|leito|atendimento|proced",
+    normalized
+  ) && !grepl("valor|custo|media|taxa|percent|propor", normalized)
+}
