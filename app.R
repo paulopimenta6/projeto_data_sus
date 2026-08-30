@@ -11,4 +11,11 @@ if (length(missing_packages) > 0L) {
   )
 }
 
+options(
+  datasus.timeout = 60,
+  datasus.download_timeout = 600,
+  datasus.max_tries = 2,
+  shiny.maxRequestSize = 100 * 1024^2
+)
+
 shiny::shinyApp(ui = app_ui(), server = app_server)

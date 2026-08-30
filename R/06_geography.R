@@ -1,6 +1,9 @@
 GEOMETRY_YEARS <- list(
   state = c(1872, 1900, 1911, 1920, 1933, 1940, 1950, 1960, 1970, 1980, 1991, 2000, 2001, 2010, 2013:2025),
-  municipality = c(1872, 1900, 1911, 1920, 1933, 1940, 1950, 1960, 1970, 1980, 1991, 2000, 2001, 2005, 2007, 2010, 2013:2025),
+  municipality = c(
+    1872, 1900, 1911, 1920, 1933, 1940, 1950, 1960, 1970,
+    1980, 1991, 2000, 2001, 2005, 2007, 2010, 2013:2025
+  ),
   health_region = c(1991, 1994, 1997, 2001, 2005, 2013, 2023, 2024, 2025)
 )
 
@@ -237,7 +240,7 @@ period_to_year_month <- function(period_label, period_value = period_label) {
 }
 
 choose_facility_date <- function(query) {
-  period <- query$periods[nrow(query$periods), , drop = FALSE]
+  period <- latest_period_row(query$periods)
   requested <- period_to_year_month(period$id[[1L]], period$value[[1L]])
   if (is.na(requested)) return(max(FACILITY_DATES))
   before <- FACILITY_DATES[FACILITY_DATES <= requested]

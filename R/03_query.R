@@ -98,7 +98,7 @@ query_years <- function(query, periods = query$periods) {
 }
 
 explicit_period_month <- function(x) {
-  vapply(as.character(x), function(value) {
+  unname(vapply(as.character(x), function(value) {
     year <- extract_year(value)
     year <- year[[1L]]
     if (is.na(year)) return(NA_integer_)
@@ -123,9 +123,36 @@ explicit_period_month <- function(x) {
       pieces <- regmatches(value, numeric_match)[[1L]]
       if (length(pieces) >= 2L) month <- as.integer(pieces[[2L]])
     }
+    if (is.na(month)) {
+      compact_match <- regexec("((?:19|20)[0-9]{2})(0[1-9]|1[0-2])", value, perl = TRUE)
+      pieces <- regmatches(value, compact_match)[[1L]]
+      if (length(pieces) >= 3L) {
+        year <- as.integer(pieces[[2L]])
+        month <- as.integer(pieces[[3L]])
+      }
+    }
     if (is.na(month) || month < 1L || month > 12L) return(NA_integer_)
     year * 100L + month
-  }, integer(1))
+  }, integer(1)))
+}
+
+latest_period_row <- function(periods) {
+  period_text <- paste(periods$id, periods$value)
+  month_key <- explicit_period_month(period_text)
+  years <- extract_year(period_text)
+  missing_month <- is.na(month_key) & !is.na(years)
+  month_key[missing_month] <- years[missing_month] * 100L + 12L
+  if (all(is.na(month_key))) return(periods[1L, , drop = FALSE])
+  periods[which.max(month_key), , drop = FALSE]
+}
+
+default_period_row <- function(periods, frequency) {
+  latest <- latest_period_row(periods)
+  if (frequency != "monthly" || nrow(periods) < 2L) return(latest)
+
+  latest_index <- match(latest$value[[1L]], periods$value)
+  remaining <- periods[-latest_index, , drop = FALSE]
+  latest_period_row(remaining)
 }
 
 query_period_weights <- function(query, periods = query$periods) {

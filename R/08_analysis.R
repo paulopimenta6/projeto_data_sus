@@ -56,7 +56,7 @@ summarize_analysis <- function(bundle, query) {
     top_value = if (!is.na(top_index)) map$display_value[[top_index]] else NA_real_,
     territories_with_data = sum(valid),
     periods = nrow(query$periods),
-    latest_period = query$periods$id[[nrow(query$periods)]],
+    latest_period = latest_period_row(query$periods)$id[[1L]],
     metric = bundle$metric,
     metric_label = bundle$metric_label
   )

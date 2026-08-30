@@ -103,8 +103,7 @@ execute_tabnet_query <- function(
   cache_key <- list(
     package_version = safe_package_version("datasus"),
     source_function = query$source_function,
-    arguments = source$arguments,
-    purpose = purpose
+    arguments = source$arguments
   )
 
   cached_call(
@@ -229,7 +228,7 @@ run_tabnet_bundle <- function(query, refresh = FALSE) {
   }
 
   map_periods <- if (query$frequency == "snapshot") {
-    query$periods[nrow(query$periods), , drop = FALSE]
+    latest_period_row(query$periods)
   } else {
     query$periods
   }
