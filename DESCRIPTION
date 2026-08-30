@@ -23,6 +23,7 @@ Imports:
     htmlwidgets,
     jsonlite,
     leaflet,
+    lintr,
     microdatasus,
     purrr,
     scales,
@@ -32,11 +33,7 @@ Imports:
     stringi,
     stringr,
     tibble,
-    tidyr
-Suggests:
-    covr,
-    lintr,
-    shinytest2,
+    tidyr,
     testthat
 Remotes:
     rpradosiqueira/datasus@v0.16.1
