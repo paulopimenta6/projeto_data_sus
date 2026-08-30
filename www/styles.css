@@ -1,0 +1,49 @@
+:root {
+  --sus-navy: #0b2d3a;
+  --sus-teal: #087e8b;
+  --sus-gold: #f4b942;
+  --sus-mist: #eef5f4;
+}
+
+body {
+  background:
+    radial-gradient(circle at 84% 12%, rgba(34, 166, 179, 0.18), transparent 30rem),
+    linear-gradient(145deg, #f7faf9 0%, #e8f2f1 100%);
+}
+
+.splash-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.splash-card {
+  width: min(780px, 100%);
+  padding: clamp(2rem, 6vw, 5rem);
+  border-radius: 2rem 0.5rem 2rem 0.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 0.45rem solid var(--sus-gold);
+  box-shadow: 0 2rem 5rem rgba(11, 45, 58, 0.14);
+}
+
+.eyebrow {
+  color: var(--sus-teal);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.splash-card h1 {
+  color: var(--sus-navy);
+  max-width: 12ch;
+  margin: 0.4rem 0 1.25rem;
+  font-size: clamp(2.5rem, 8vw, 5.5rem);
+  line-height: 0.95;
+}
+
+.splash-copy {
+  max-width: 58ch;
+  color: #36545e;
+  font-size: 1.15rem;
+}

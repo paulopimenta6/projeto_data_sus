@@ -1,0 +1,14 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.renv/
+renv/library/
+renv/staging/
+data/cache/*
+!data/cache/.gitkeep
+exports/*
+!exports/.gitkeep
+*.html
+*.log
+.DS_Store

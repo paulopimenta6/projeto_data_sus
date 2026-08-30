@@ -1,0 +1,42 @@
+Package: projetodatasus
+Type: Project
+Title: Painel Nacional de Dados do SUS
+Version: 0.1.0
+Authors@R: person("Paulo", role = c("aut", "cre"), email = "paulo@localhost")
+Description: Aplicação Shiny local para consultar, resumir e mapear dados
+    públicos do Sistema Único de Saúde por período, condição, procedimento e
+    território, com exportação e proveniência reproduzível.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports:
+    bslib,
+    cachem,
+    datasus,
+    datasusr,
+    digest,
+    dplyr,
+    DT,
+    geobr,
+    ggplot2,
+    htmltools,
+    htmlwidgets,
+    jsonlite,
+    leaflet,
+    microdatasus,
+    purrr,
+    scales,
+    sf,
+    shiny,
+    sidrar,
+    stringi,
+    stringr,
+    tibble,
+    tidyr
+Suggests:
+    covr,
+    lintr,
+    shinytest2,
+    testthat
+Remotes:
+    rpradosiqueira/datasus@v0.16.1
