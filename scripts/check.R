@@ -2,11 +2,17 @@ options(warn = 1)
 
 source("global.R")
 
-files <- c("app.R", "global.R", list.files("R", pattern = "[.]R$", full.names = TRUE))
+files <- c(
+  "app.R",
+  "global.R",
+  "prepare_environment.R",
+  list.files("R", pattern = "[.]R$", full.names = TRUE)
+)
 invisible(lapply(files, parse))
 message("Sintaxe: OK")
 
 lints <- c(
+  lintr::lint("prepare_environment.R"),
   lintr::lint_dir("R"),
   lintr::lint_dir("scripts"),
   lintr::lint_dir("tests")

@@ -1,17 +1,10 @@
-options(repos = c(CRAN = "https://cloud.r-project.org"))
-
-if (!requireNamespace("renv", quietly = TRUE)) {
-  install.packages("renv")
-}
-
-if (file.exists("renv.lock")) {
-  renv::restore(prompt = FALSE)
+file_argument <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+script_path <- if (length(file_argument) > 0L) {
+  sub("^--file=", "", file_argument[[1L]])
 } else {
-  renv::init(bare = TRUE, restart = FALSE)
-  renv::install("remotes")
-  renv::install("rpradosiqueira/datasus@v0.16.1")
-  renv::install()
-  renv::snapshot(prompt = FALSE)
+  file.path(getwd(), "scripts", "setup.R")
 }
+project_root <- dirname(dirname(normalizePath(script_path, mustWork = TRUE)))
 
-message("Ambiente restaurado. Execute: Rscript -e 'shiny::runApp(\".\")'")
+source(file.path(project_root, "prepare_environment.R"), chdir = TRUE)
+prepare_environment(project = project_root, args = commandArgs(trailingOnly = TRUE))

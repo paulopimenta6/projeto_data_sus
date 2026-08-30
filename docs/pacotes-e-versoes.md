@@ -1,39 +1,74 @@
-# Auditoria de pacotes e referências
+# Pacotes e versões
 
-Verificação realizada em 30 de agosto de 2026.
+Esta é uma referência técnica. Quem deseja apenas usar o painel pode executar `Rscript prepare_environment.R` e não precisa instalar os pacotes desta página um por um.
 
-| Referência | Situação verificada | Decisão do projeto |
-|---|---|---|
-| `datasus` 0.4.1.1 no RDocumentation | Versão publicada em 2019; removida do CRAN em 21/11/2020 e disponível apenas no arquivo | Não instalar a versão antiga |
-| `rpradosiqueira/datasus` | Versão marcada `v0.16.1`, em desenvolvimento ativo e fora do CRAN | Fixar tag `v0.16.1` e commit `eec28e81` no `renv.lock` |
-| `datasusr` | CRAN 0.1.0, publicado em 04/05/2026 | Usar como camada DBC de baixo nível e dependência do `datasus` |
-| `microdatasus` | CRAN 3.0.0, publicado em 29/07/2026 | Usar para processamento e tabelas auxiliares quando microdados forem necessários |
-| Artigo Análise Macro | Publicado em 12/01/2022 e baseado em API anterior do `microdatasus` | Referência didática, não contrato de API |
-| Guia RPubs `guiamicrodatasus` | Guia comunitário com mais de dois anos | Referência didática secundária |
+## Como o ambiente é mantido
 
-Dependências espaciais e demográficas verificadas:
+O projeto usa dois arquivos principais:
 
-| Pacote | Versão | Uso |
+- `DESCRIPTION` declara os pacotes necessários.
+- `renv.lock` registra as versões exatas e a origem de cada pacote.
+
+O `prepare_environment.R` lê esses arquivos, instala bibliotecas do Ubuntu/Debian, restaura o ambiente e confere as versões. Executar `install.packages()` manualmente não é recomendado porque pode criar combinações diferentes das que foram testadas.
+
+## Pacotes principais
+
+| Pacote | Versão registrada | Função no projeto |
 |---|---:|---|
-| `geobr` | 2.0.1 | Estados, municípios, regiões de saúde e estabelecimentos |
-| `sidrar` | 0.5.0 | População municipal após 2021 |
+| `datasus` | 0.16.1 | Consulta agregada e descoberta de filtros TABNET |
+| `datasusr` | 0.1.0 | Leitura DBC e suporte de baixo nível |
+| `microdatasus` | 3.0.0 | Processamento de microdados em extensões futuras |
+| `geobr` | 2.0.1 | Limites territoriais e estabelecimentos |
+| `sidrar` | 0.5.0 | População municipal do IBGE/SIDRA |
 | `leaflet` | 2.2.3 | Mapas interativos |
-| `renv` | 1.2.4 | Ambiente reproduzível |
+| `renv` | 1.2.4 | Biblioteca isolada e reprodução de versões |
+| `pak` | 0.11.1 | Descoberta de bibliotecas do sistema |
 
-## Motivo da combinação
+O `renv.lock` é a fonte definitiva caso a tabela acima fique desatualizada.
 
-`datasus` 0.16.1 oferece consultas agregadas e descoberta de filtros adequadas a um painel nacional. `datasusr` é mais eficiente para leitura DBC e cache de arquivos brutos, mas não fornece rótulos clínicos. `microdatasus` possui processadores por sistema, mas baixar todos os microdados nacionais do SIA ou SIH para cada interação seria inadequado.
+## Por que o pacote datasus vem do GitHub
 
-O painel usa TABNET como caminho principal e mantém as outras bibliotecas declaradas para extensões de detalhe. Essa separação reduz memória, tempo de resposta e risco de travamento local.
+A versão antiga `datasus` 0.4.1.1 foi removida do CRAN em 2020. O projeto usa `rpradosiqueira/datasus` na tag `v0.16.1`, fixada no commit:
 
-## Fontes consultadas
+```text
+eec28e81ef833d344b3c6a170de7456945e87360
+```
 
-- <https://www.rdocumentation.org/packages/datasus/versions/0.4.1.1>
-- <https://cran.r-project.org/package=datasus>
+Fixar o commit impede que uma mudança futura no repositório altere silenciosamente o comportamento da aplicação.
+
+## Compatibilidade do R
+
+O `DESCRIPTION` exige R 4.1 ou mais recente. O lockfile atual foi criado com R 4.6.1.
+
+Quando outra versão compatível é usada, o preparador informa a diferença e tenta restaurar exatamente os pacotes registrados. Se uma versão não puder ser compilada, a instalação para sem substituir silenciosamente o pacote por outro.
+
+## Como atualizar dependências com segurança
+
+Uma atualização deve ser feita por uma pessoa desenvolvedora em uma mudança separada:
+
+1. Atualizar o pacote desejado no ambiente `renv`.
+2. Executar `Rscript scripts/check.R`.
+3. Executar os testes ao vivo.
+4. Testar o painel no navegador.
+5. Atualizar `renv.lock` com `renv::snapshot()`.
+6. Registrar no Git as alterações do código e do lockfile juntas.
+
+## Auditoria das referências
+
+Verificação original realizada em 30 de agosto de 2026.
+
+| Referência | Situação observada |
+|---|---|
+| `datasus` no RDocumentation | Versão 0.4.1.1, publicada em 2019 e arquivada |
+| `rpradosiqueira/datasus` | Tag `v0.16.1`, usada pelo projeto |
+| `datasusr` | Pacote CRAN para leitura e cache DBC |
+| `microdatasus` | Pacote CRAN com processadores por sistema |
+
+Fontes consultadas:
+
 - <https://github.com/rpradosiqueira/datasus>
 - <https://cran.r-project.org/package=datasusr>
-- <https://github.com/StrategicProjects/datasusr>
 - <https://cran.r-project.org/package=microdatasus>
-- <https://github.com/rfsaldanha/microdatasus>
-- <https://analisemacro.com.br/data-science/dicas-de-rstats/hackeando-o-r-acessando-os-dados-do-datasus-com-o-r/>
-- <https://rpubs.com/romulofreits/guiamicrodatasus>
+- <https://ipeagit.github.io/geobr/>
+- <https://rstudio.github.io/renv/>
+- <https://pak.r-lib.org/>

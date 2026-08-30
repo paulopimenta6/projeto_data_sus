@@ -1,89 +1,115 @@
-# Metodologia
+# Entenda a metodologia
 
-## Unidade de análise
+Esta página explica como o painel transforma uma escolha feita na tela em um resultado. Os detalhes ajudam a interpretar os números, mas não são necessários para começar a usar o sistema.
 
-O significado de uma linha varia por sistema. O SIM representa óbitos. O SIH representa AIH e internações registradas conforme a tabela consultada. O SIA representa produção ambulatorial apresentada ou aprovada. O SINAN representa notificações e investigações. O CNES representa estabelecimentos e recursos cadastrados em uma competência.
+## O que o painel consulta
 
-O painel preserva essas diferenças e não usa o termo paciente para unidades administrativas que podem incluir repetições da mesma pessoa.
+O painel usa tabelas agregadas do TABNET. Em vez de baixar milhões de registros individuais, ele pede ao DATASUS uma tabela já resumida para os filtros escolhidos.
 
-## Estratégia de aquisição
+Uma análise pode realizar três consultas:
 
-O adaptador consulta primeiro `datasus::datasus_opcoes()`. A resposta contém dimensões de linha e coluna, medidas, competências e filtros publicados no formulário naquele momento. A interface usa o rótulo para apresentação e o valor bruto para a requisição.
+1. Uma consulta por território para a tabela e o mapa.
+2. Uma consulta por condição, procedimento ou categoria para o ranking.
+3. Uma consulta por mês ou ano para a série temporal.
 
-Cada análise pode executar até três consultas agregadas:
+Se uma dimensão não estiver disponível, o painel usa uma alternativa e mostra um aviso. Por exemplo, o ranking pode passar a mostrar territórios.
 
-1. território na linha, para tabela e mapa;
-2. condição, procedimento ou categoria na linha, para ranking;
-3. competência ou ano na linha, para série temporal.
+## O que é um total
 
-Quando não existe dimensão temporal, o painel consulta cada competência separadamente. Quando não existe dimensão de condição, o ranking territorial é usado e um aviso é exibido.
+Total é a soma da medida escolhida no período e no recorte selecionados. O significado depende da fonte:
 
-Consultas de múltiplas competências são agregadas apenas quando a finalidade é explicitamente o total do período. O manifesto registra todos os valores enviados ao TABNET.
+- no SIM, pode ser número de óbitos;
+- no SIH, pode ser número de internações ou AIH;
+- no SIA, pode ser quantidade aprovada;
+- no SINAN, pode ser número de notificações;
+- no CNES, pode ser número de estabelecimentos ou recursos cadastrados.
 
-## CNES
+Linhas chamadas “Total” pelo TABNET são identificadas antes da soma para evitar dupla contagem.
 
-CNES contém fotografias cadastrais mensais, não eventos. Se várias competências forem selecionadas:
+## O que é uma taxa por 100 mil
 
-- a série mostra cada competência;
-- o mapa e o ranking usam a competência mais recente;
-- nenhuma soma de estabelecimentos entre meses é produzida.
-
-Pontos de estabelecimentos vêm de `geobr::read_health_facilities()`. Registros com motivo de desativação, coordenadas não finitas ou coordenadas fora dos limites aproximados do Brasil são excluídos do mapa. O painel não corrige silenciosamente coordenadas inválidas.
-
-## Geografia
-
-Códigos municipais DATASUS de seis dígitos são convertidos para códigos IBGE de sete dígitos com `datasus::normalizar_codigo_ibge()`. Limites vêm do `geobr` e usam SIRGAS 2000.
-
-O ano da geometria é o mais recente que não ultrapassa o ano analítico, entre os anos disponíveis. Quando a fonte não possui a mesma safra territorial, o ano efetivamente usado aparece na tela e no manifesto.
-
-Regiões de saúde mudam ao longo do tempo. A versão de 2022, por exemplo, usa a referência disponível anterior; não se deve interpretar essa associação como vigência jurídica exata.
-
-## Totais e séries
-
-Colunas numéricas múltiplas retornadas pelo TABNET são somadas para o total solicitado. Linhas `Total` são identificadas e removidas antes de agregações por território para impedir dupla contagem.
-
-Em fontes mensais, subtotais anuais presentes na mesma dimensão são removidos quando competências mensais específicas foram selecionadas.
-
-## Taxas
-
-A taxa bruta é:
+A taxa bruta é calculada assim:
 
 ```text
-eventos / denominador × 100.000
+eventos ÷ população × 100.000
 ```
 
-Para um mapa que agrega parte de um ano, o denominador é convertido em pessoas-ano pela fração de competências selecionadas. Para uma série mensal, cada ponto é expresso por 100 mil residentes usando a população anual, sem anualização do numerador.
+Exemplo: 50 eventos em uma população de 100.000 habitantes correspondem a uma taxa de 50 por 100 mil.
 
-Para períodos anuais completos, soma-se a população de cada ano, formando pessoas-ano. Taxas não são calculadas para medidas monetárias, médias, proporções ou taxas já fornecidas pela fonte.
+Taxas são úteis para comparar populações de tamanhos diferentes. Elas não corrigem diferenças de idade, sexo ou composição social; por isso são chamadas de taxas brutas.
 
-O intervalo exato de Poisson de 95% é calculado apenas quando numerador e denominador são válidos e o numerador é uma contagem inteira não negativa.
+Medidas monetárias, médias, percentuais e taxas que já vêm prontas da fonte não recebem uma nova taxa.
 
-## Denominadores
+## Como meses e anos entram no denominador
 
-| Ano | Fonte |
+Para um ano completo, o painel usa a população daquele ano. Quando vários anos são somados, as populações anuais formam pessoas-ano.
+
+Quando apenas alguns meses são somados, o denominador geral usa a fração correspondente do ano. Uma seleção de três meses, por exemplo, usa `3/12` da população anual como pessoas-ano.
+
+Na série mensal, cada ponto usa a população do ano sem anualizar o número de eventos.
+
+## Intervalo de confiança
+
+Quando o numerador é uma contagem inteira, o painel calcula um intervalo exato de Poisson de 95%.
+
+O intervalo mostra a incerteza estatística em torno da taxa. Intervalos largos são comuns quando há poucos eventos e devem levar a uma interpretação mais cautelosa.
+
+## Como os territórios são ligados ao mapa
+
+Códigos municipais de seis dígitos do DATASUS são convertidos para códigos IBGE de sete dígitos. O código é a primeira tentativa de ligação com a geometria.
+
+Se o código não produzir correspondência, o painel tenta o nome normalizado do território. Linhas que continuarem sem geometria aparecem em um aviso e permanecem na tabela.
+
+O sistema usa SIRGAS 2000 e transforma o resultado para o formato exigido pelo mapa interativo.
+
+## Particularidade do CNES
+
+CNES representa estoque cadastrado, não eventos. Quando mais de uma competência é selecionada:
+
+- a série preserva cada competência;
+- o mapa e o ranking usam a competência mais recente;
+- estabelecimentos não são somados entre meses.
+
+Pontos inativos, coordenadas não numéricas e coordenadas fora dos limites aproximados do Brasil são retirados do mapa de estabelecimentos.
+
+## De onde vem cada população
+
+| Ano | Regra |
 |---|---|
-| Até 2021 | DATASUS, estimativa municipal |
-| 2022 | SIDRA 4709, variável 93, Censo 2022 |
-| 2023 | Sem estimativa na SIDRA 6579; resultado fica ausente |
-| 2024 em diante | SIDRA 6579, variável 9324 |
+| Até 2021 | Estimativa municipal do DATASUS |
+| 2022 | Censo 2022, SIDRA tabela 4709, variável 93 |
+| 2023 | Sem interpolação automática; taxa ausente quando não há denominador |
+| 2024 em diante | SIDRA tabela 6579, variável 9324 |
 
-Ausência de qualquer ano exigido invalida o denominador do território para o total multiperíodo. O painel não usa interpolação automática.
+Se faltar população para qualquer ano necessário em uma análise multiperíodo, o denominador daquele território fica ausente. O painel não inventa ou interpola valores silenciosamente.
 
-## Proveniência
+## Como reproduzir um resultado
 
-O manifesto JSON inclui:
+O download **Manifesto · JSON** registra:
 
-- domínio, conjunto e função de origem;
-- UF e nível geográfico;
-- rótulo e valor bruto da medida;
-- rótulos e valores brutos das competências;
-- filtros enviados;
-- data da consulta;
-- URL e dados de proveniência expostos pelo pacote;
-- ano da geometria;
-- versões de R e dos principais pacotes;
+- fonte e conjunto de dados;
+- medida e períodos;
+- filtros enviados ao TABNET;
+- data e horário da consulta;
+- ano dos limites territoriais;
+- versões do R e dos principais pacotes;
 - avisos metodológicos.
 
-## Interpretação
+Guarde o manifesto junto com as tabelas e figuras quando precisar documentar uma análise.
 
-Os resultados descrevem registros administrativos públicos. Diferenças territoriais podem refletir cobertura, organização da rede, acesso, regras de financiamento, qualidade de preenchimento e fluxo de pacientes, além da ocorrência epidemiológica.
+## Glossário rápido
+
+| Termo | Significado neste projeto |
+|---|---|
+| AIH | Autorização de Internação Hospitalar |
+| Competência | Mês ou período administrativo de registro |
+| Denominador | População usada para calcular uma taxa |
+| GeoJSON | Arquivo de dados geográficos que pode ser aberto em programas de mapas |
+| Pessoas-ano | População multiplicada pelo tempo observado |
+| TABNET | Ferramenta pública de tabelas do DATASUS |
+
+## Cuidado na interpretação
+
+Os resultados descrevem registros administrativos. Diferenças entre lugares podem refletir ocorrência de doenças, tamanho da população, acesso aos serviços, encaminhamento, regras de financiamento e qualidade de preenchimento.
+
+Uma associação no mapa ou no tempo não prova causa. Para decisões clínicas, epidemiológicas ou de gestão, combine os resultados com conhecimento local e notas técnicas oficiais.

@@ -25,6 +25,7 @@ Imports:
     leaflet,
     lintr,
     microdatasus,
+    pak,
     purrr,
     scales,
     sf,
