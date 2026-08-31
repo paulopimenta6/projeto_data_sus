@@ -46,7 +46,7 @@ Para um ano completo, o painel usa a população daquele ano. Quando vários ano
 
 Quando apenas alguns meses são somados, o denominador geral usa a fração correspondente do ano. Uma seleção de três meses, por exemplo, usa `3/12` da população anual como pessoas-ano.
 
-Na série mensal, cada ponto usa a população do ano sem anualizar o número de eventos.
+Na série mensal, cada ponto usa `1/12` da população anual. Isso transforma o resultado em uma taxa anualizada por 100 mil pessoas-ano e mantém a mesma unidade usada no mapa do período. Essa taxa ajuda a comparar a velocidade de ocorrência entre meses; para descrever a carga observada em um mês, consulte também o total.
 
 ## Intervalo de confiança
 
@@ -81,7 +81,7 @@ Pontos inativos, coordenadas não numéricas e coordenadas fora dos limites apro
 | 2023 | Sem interpolação automática; taxa ausente quando não há denominador |
 | 2024 em diante | SIDRA tabela 6579, variável 9324 |
 
-Se faltar população para qualquer ano necessário em uma análise multiperíodo, o denominador daquele território fica ausente. O painel não inventa ou interpola valores silenciosamente.
+Se faltar população para qualquer território ou ano necessário, o denominador correspondente fica ausente. Totais estaduais e regionais também ficam ausentes quando algum componente conhecido não possui população. O painel não soma denominadores parciais nem inventa ou interpola valores silenciosamente.
 
 ## Como reproduzir um resultado
 

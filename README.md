@@ -210,7 +210,7 @@ O manifesto registra filtros, períodos, versões, fonte, horário e avisos meto
 | 2023 | Taxa omitida quando não existe denominador municipal oficial compatível |
 | 2024 em diante | Estimativa municipal, SIDRA tabela 6579 |
 
-Quando vários meses são somados, o painel usa pessoas-ano no denominador geral. Intervalos de 95% usam o método exato de Poisson quando o numerador é uma contagem inteira.
+Quando vários meses são somados, o painel usa pessoas-ano no denominador geral. Na série mensal, cada ponto usa `1/12` da população anual, de modo que as taxas mensais também são apresentadas por 100 mil pessoas-ano. Intervalos de 95% usam o método exato de Poisson quando o numerador é uma contagem inteira.
 
 ### Fontes e conexão com a internet
 
@@ -219,6 +219,8 @@ Os dados vêm de DATASUS/TABNET, IBGE/SIDRA e `geobr`. O sistema precisa de inte
 ### Cache local
 
 Resultados já consultados ficam em `data/cache/` para acelerar acessos posteriores. O cache contém respostas públicas e não é enviado ao GitHub.
+
+Cada tipo de resultado possui um prazo de atualização. Quando um item já passou desse prazo, o painel tenta consultar a fonte novamente. Se o serviço estiver temporariamente indisponível, o resultado antigo pode ser usado como contingência, sempre com um aviso e com a data do cache. Os mapas de fundo do OpenStreetMap ainda precisam de internet.
 
 Para apagar o cache, feche o sistema e remova o conteúdo da pasta `data/cache/`. A consulta seguinte será baixada novamente.
 
@@ -269,7 +271,7 @@ Sim. Em alguns computadores o DuckDB precisa ser compilado e pode ficar vários 
 
 ### 7. O DATASUS demorou ou retornou erro. O sistema está quebrado?
 
-Provavelmente não. O TABNET pode ficar lento ou indisponível. Aguarde alguns minutos e tente novamente. Consultas anteriores podem continuar disponíveis no cache.
+Provavelmente não. O TABNET pode ficar lento ou indisponível. Aguarde alguns minutos e tente novamente. Consultas anteriores podem continuar disponíveis no cache; quando um resultado antigo for usado, o painel mostrará a data dele em um aviso.
 
 ### 8. Por que o painel começa na penúltima competência mensal?
 
@@ -297,7 +299,7 @@ Procure no terminal um endereço iniciado por `http://127.0.0.1:`. Abra esse end
 
 ### 14. Posso usar o painel sem internet?
 
-Somente para itens que já estejam no cache. Novas consultas e novas geometrias precisam de internet.
+Somente para itens que já estejam no cache. Novas consultas, novas geometrias e os mapas de fundo precisam de internet. Um cache fora do prazo só é reutilizado se a tentativa de atualização falhar, e o painel informa essa situação.
 
 ### 15. Como verifico se a instalação continua correta?
 

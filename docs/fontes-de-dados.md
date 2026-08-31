@@ -70,4 +70,4 @@ Limites podem mudar. Um município criado ou alterado depois do período analisa
 
 DATASUS, SIDRA e os arquivos espaciais são serviços externos. Eles podem ficar lentos, mudar um formulário ou interromper o acesso por algum tempo.
 
-O painel nunca transforma uma falha de rede em zero. Ele mostra o erro ou um aviso e preserva no cache apenas respostas concluídas com sucesso.
+O painel nunca transforma uma falha de rede em zero. Ele mostra o erro ou um aviso e preserva no cache apenas respostas concluídas com sucesso. Se já existir uma resposta antiga completa, ela pode ser usada como contingência quando a atualização falhar; nesse caso, a data do cache é informada.
