@@ -54,14 +54,8 @@ mod_filters_ui <- function(id) {
     shiny::uiOutput(ns("condition_values_ui")),
     shiny::uiOutput(ns("territory_field_ui")),
     shiny::uiOutput(ns("territory_values_ui")),
-    shiny::checkboxInput(ns("urgent_only"), "Somente atendimentos de urgência", FALSE),
-    shiny::radioButtons(
-      ns("scale"),
-      "Métrica exibida",
-      choices = c("Total" = "count", "Taxa por 100 mil" = "rate"),
-      selected = "count",
-      inline = TRUE
-    ),
+    shiny::uiOutput(ns("urgency_ui")),
+    shiny::uiOutput(ns("scale_ui")),
     shiny::actionButton(
       ns("analyze"),
       "Analisar",
@@ -215,6 +209,34 @@ mod_filters_server <- function(id) {
       )
     })
 
+    output$urgency_ui <- shiny::renderUI({
+      value <- valid_metadata()
+      if (is.null(resolve_urgency_filter(value))) return(NULL)
+      shiny::checkboxInput(
+        session$ns("urgent_only"),
+        "Somente atendimentos de urgência",
+        FALSE
+      )
+    })
+
+    output$scale_ui <- shiny::renderUI({
+      value <- valid_metadata()
+      measure <- value$conteudo[value$conteudo$value %in% input$measure, , drop = FALSE]
+      measure_label <- if (nrow(measure) == 1L) measure$id[[1L]] else ""
+      choices <- if (is_count_measure(measure_label)) {
+        c("Total" = "count", "Taxa por 100 mil" = "rate")
+      } else {
+        c("Total" = "count")
+      }
+      shiny::radioButtons(
+        session$ns("scale"),
+        "Métrica exibida",
+        choices = choices,
+        selected = "count",
+        inline = TRUE
+      )
+    })
+
     query <- shiny::reactive({
       value <- valid_metadata()
       signature <- attr(value, "app_signature")
@@ -242,7 +264,7 @@ mod_filters_server <- function(id) {
         territory_field = input$territory_field,
         territory_values = input$territory_values %||% character(),
         urgent_only = isTRUE(input$urgent_only),
-        scale = input$scale
+        scale = input$scale %||% "count"
       )
     })
 

@@ -28,6 +28,14 @@ test_that("TABNET numeric tables are normalized without double-counting totals",
   expect_equal(tabnet_total(result), 1254)
 })
 
+test_that("an entirely missing TABNET result remains missing", {
+  normalized <- tibble::tibble(
+    value = c(NA_real_, NA_real_),
+    is_total = c(FALSE, FALSE)
+  )
+  expect_true(is.na(tabnet_total(normalized)))
+})
+
 test_that("monthly series excludes annual subtotal rows", {
   series <- tibble::tibble(label = c("2024", "Janeiro/2024", "Fevereiro/2024"))
   filtered <- filter_series_to_periods(series, mock_query())
@@ -38,4 +46,10 @@ test_that("urgency option is added using the live field value", {
   result <- add_urgency_filter(list(), mock_options())
   expect_equal(result$filters$carater_atendiment, "02")
   expect_length(result$warnings, 0L)
+})
+
+test_that("an unsupported urgency selection is rejected", {
+  options <- mock_options()
+  options$filtros$carater_atendiment <- NULL
+  expect_error(add_urgency_filter(list(), options), "não oferece uma opção explícita")
 })

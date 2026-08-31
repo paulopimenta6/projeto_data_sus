@@ -56,7 +56,7 @@ normalize_municipality_code <- function(code) {
   six <- !is.na(code) & nchar(code) == 6L
   if (any(six)) {
     normalized <- tryCatch(
-      datasus::normalizar_codigo_ibge(code[six]),
+      datasus::normalizar_codigo_ibge(code[six], desconhecido = "na"),
       error = function(error) rep(NA_character_, sum(six))
     )
     result[six] <- format_integer_code(normalized, width = 7L)

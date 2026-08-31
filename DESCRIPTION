@@ -1,7 +1,7 @@
 Package: projetodatasus
 Type: Project
 Title: Painel Nacional de Dados do SUS
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Paulo", role = c("aut", "cre"), email = "paulo@localhost")
 Description: Aplicação Shiny local para consultar, resumir e mapear dados
     públicos do Sistema Único de Saúde por período, condição, procedimento e

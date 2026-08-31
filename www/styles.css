@@ -11,14 +11,14 @@ body {
     linear-gradient(145deg, #f7faf9 0%, #e8f2f1 100%);
 }
 
-.bslib-page-sidebar > .sidebar {
+.bslib-page-sidebar .sidebar {
   background: var(--sus-navy);
   color: #f5fbfa;
   border-right: 0;
 }
 
-.bslib-page-sidebar > .sidebar label,
-.bslib-page-sidebar > .sidebar .control-label {
+.bslib-page-sidebar .sidebar label,
+.bslib-page-sidebar .sidebar .control-label {
   color: #dcebea;
   font-weight: 650;
 }
@@ -285,6 +285,10 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+.viz-card-wide {
+  grid-column: 1 / -1;
 }
 
 .viz-card,

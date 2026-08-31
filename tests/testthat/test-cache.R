@@ -31,4 +31,18 @@ test_that("persistent cache reuses values and honors refresh", {
   expect_equal(second$value, 1L)
   expect_equal(refreshed$value, 2L)
   expect_equal(calls, 2L)
+
+  cache_path <- cache_file_path("test", list(id = 1L))
+  Sys.setFileTime(cache_path, Sys.time() - 120)
+  fallback <- expect_warning(
+    cached_call(
+      "test",
+      list(id = 1L),
+      function() stop("serviço fora do ar"),
+      max_age = 60
+    ),
+    "usando o resultado local"
+  )
+  expect_equal(fallback$value, 2L)
+  expect_equal(attr(fallback, "cache_fallback")$reason, "serviço fora do ar")
 })

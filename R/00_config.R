@@ -1,5 +1,5 @@
 APP_NAME <- "Painel Nacional de Dados do SUS"
-APP_VERSION <- "0.1.0"
+APP_VERSION <- "0.1.1"
 
 REQUIRED_PACKAGES <- c(
   "bslib", "cachem", "datasus", "datasusr", "digest", "dplyr", "DT",

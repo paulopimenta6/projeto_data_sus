@@ -13,12 +13,39 @@ cache_is_fresh <- function(path, max_age) {
 
 cached_call <- function(namespace, key, function_to_run, max_age = 86400, refresh = FALSE) {
   path <- cache_file_path(namespace, key)
-  if (!isTRUE(refresh) && cache_is_fresh(path, max_age)) {
-    cached <- tryCatch(readRDS(path), error = function(error) NULL)
-    if (!is.null(cached)) return(cached)
+  cached <- if (file.exists(path)) {
+    tryCatch(readRDS(path), error = function(error) NULL)
+  } else {
+    NULL
+  }
+  if (!isTRUE(refresh) && cache_is_fresh(path, max_age) && !is.null(cached)) {
+    return(cached)
   }
 
-  value <- function_to_run()
+  source_error <- NULL
+  value <- tryCatch(
+    function_to_run(),
+    error = function(error) {
+      source_error <<- error
+      NULL
+    }
+  )
+  if (!is.null(source_error)) {
+    if (is.null(cached)) stop(source_error)
+    cache_time <- file.info(path)$mtime
+    warning(
+      "A fonte está indisponível; usando o resultado local de ",
+      format(cache_time, "%d/%m/%Y %H:%M"), ". Motivo: ",
+      conditionMessage(source_error),
+      call. = FALSE
+    )
+    attr(cached, "cache_fallback") <- list(
+      cached_at = cache_time,
+      reason = conditionMessage(source_error)
+    )
+    return(cached)
+  }
+
   temporary <- tempfile(pattern = "cache-", tmpdir = dirname(path), fileext = ".rds")
   on.exit(unlink(temporary), add = TRUE)
   saveRDS(value, temporary, version = 3)

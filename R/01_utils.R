@@ -32,3 +32,8 @@ safe_package_version <- function(package) {
   }
   as.character(utils::packageVersion(package))
 }
+
+sum_or_na <- function(x) {
+  if (length(x) == 0L || all(is.na(x))) return(NA_real_)
+  sum(x, na.rm = TRUE)
+}

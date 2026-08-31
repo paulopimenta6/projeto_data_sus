@@ -31,13 +31,26 @@ chart_theme <- function() {
 make_series_plot <- function(analysis) {
   data <- analysis$series
   data$period <- factor(data$label, levels = unique(data$label))
+  valid_values <- sum(!is.na(data$display_value))
   plot <- ggplot2::ggplot(data, ggplot2::aes(x = .data$period, y = .data$display_value, group = 1))
-  if (sum(!is.na(data$display_value)) > 1L) {
-    plot <- plot + ggplot2::geom_line(color = APP_COLORS$teal, linewidth = 1.1, na.rm = TRUE)
+  if (valid_values > 1L) {
+    plot <- plot +
+      ggplot2::geom_line(color = APP_COLORS$teal, linewidth = 1.1, na.rm = TRUE) +
+      ggplot2::geom_point(
+        color = APP_COLORS$gold,
+        fill = APP_COLORS$navy,
+        shape = 21,
+        size = 2.8,
+        na.rm = TRUE
+      )
+  } else {
+    plot <- plot + ggplot2::geom_col(fill = APP_COLORS$teal, width = 0.55, na.rm = TRUE)
   }
   plot +
-    ggplot2::geom_point(color = APP_COLORS$gold, fill = APP_COLORS$navy, shape = 21, size = 2.8, na.rm = TRUE) +
-    ggplot2::scale_y_continuous(labels = scales::label_number(big.mark = ".", decimal.mark = ",")) +
+    ggplot2::scale_y_continuous(
+      labels = scales::label_number(big.mark = ".", decimal.mark = ","),
+      limits = if (valid_values <= 1L) c(0, NA) else NULL
+    ) +
     ggplot2::labs(
       title = "Evolução no período selecionado",
       subtitle = analysis$metric_label,

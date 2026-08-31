@@ -40,3 +40,36 @@ test_that("choropleth widget is compatible with the installed Leaflet API", {
   )
   expect_s3_class(build_choropleth_map(analysis), "leaflet")
 })
+
+test_that("facility GeoJSON exports only public mapping fields", {
+  facilities <- sf::st_as_sf(
+    data.frame(
+      co_cnes = "1234567",
+      facility_name = "Hospital teste",
+      name_muni = "Rio Branco",
+      facility_type_code = "05",
+      facility_date = 202604L,
+      nu_cpf = "00000000000",
+      longitude = -67.81,
+      latitude = -9.97
+    ),
+    coords = c("longitude", "latitude"),
+    crs = 4326
+  )
+  path <- tempfile(fileext = ".geojson")
+  on.exit(unlink(path), add = TRUE)
+  write_facilities_geojson(facilities, path)
+  exported <- sf::st_read(path, quiet = TRUE)
+  expect_true(all(c("co_cnes", "facility_name", "name_muni") %in% names(exported)))
+  expect_false("nu_cpf" %in% names(exported))
+})
+
+test_that("a one-period series uses a zero-based bar", {
+  analysis <- list(
+    series = tibble::tibble(label = "Mai/2026", display_value = 5328),
+    metric_label = "Internações"
+  )
+  built <- ggplot2::ggplot_build(make_series_plot(analysis))
+  expect_s3_class(built$plot$layers[[1L]]$geom, "GeomCol")
+  expect_lte(built$layout$panel_scales_y[[1L]]$range$range[[1L]], 0)
+})

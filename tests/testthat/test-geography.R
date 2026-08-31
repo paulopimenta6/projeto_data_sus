@@ -2,6 +2,13 @@ test_that("DATASUS municipality codes become seven-digit IBGE codes", {
   expect_equal(normalize_municipality_code(c("355030", "3550308")), c("3550308", "3550308"))
 })
 
+test_that("unknown municipality codes do not invalidate valid codes", {
+  expect_equal(
+    normalize_municipality_code(c("120040", "000000", "3550308")),
+    c("1200401", NA_character_, "3550308")
+  )
+})
+
 test_that("geographic labels retain code, name, and totals", {
   data <- tibble::tibble(
     label = c("11 Rondônia", "12 Acre"),

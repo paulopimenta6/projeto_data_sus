@@ -71,8 +71,8 @@ app_ui <- function() {
           htmltools::tags$p(
             paste(
               "Taxas brutas utilizam população oficial municipal. Agregações mensais são",
-              "expressas por 100 mil pessoas-ano; séries mensais usam a população anual do",
-              "território. O ano de 2023 pode ficar sem taxa por ausência de estimativa",
+              "expressas por 100 mil pessoas-ano; cada ponto mensal usa um doze avos da",
+              "população anual. O ano de 2023 pode ficar sem taxa por ausência de estimativa",
               "municipal na série SIDRA 6579."
             )
           ),

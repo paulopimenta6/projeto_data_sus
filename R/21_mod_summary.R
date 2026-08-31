@@ -54,7 +54,17 @@ mod_summary_server <- function(id, analysis) {
       } else {
         as.character(summary$periods)
       }
-      second_note <- if (summary$metric == "rate") "por 100 mil pessoas-ano" else summary$latest_period
+      second_note <- if (summary$metric == "rate") {
+        sub("^Taxa ", "", summary$metric_label)
+      } else {
+        summary$latest_period
+      }
+      geography_note <- switch(
+        value$query$geo_level,
+        state = "Unidades da Federação",
+        municipality = "Municípios",
+        health_region = "Regiões de saúde"
+      )
 
       htmltools::tags$div(
         class = "kpi-grid",
@@ -69,7 +79,7 @@ mod_summary_server <- function(id, analysis) {
         kpi_card(
           "Territórios com dados",
           format_pt_number(summary$territories_with_data),
-          value$query$geo_level,
+          geography_note,
           "coral"
         )
       )

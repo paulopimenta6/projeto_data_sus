@@ -30,27 +30,29 @@ fetch_datasus_options <- function(domain, dataset, uf = NULL, geo_level = "state
   )
 }
 
-add_urgency_filter <- function(filters, options) {
+resolve_urgency_filter <- function(options) {
   filter_index <- classify_source_filters(options)
   urgency <- filter_index[filter_index$role == "urgency", , drop = FALSE]
-  if (nrow(urgency) == 0L) {
-    return(list(
-      filters = filters,
-      warnings = "A fonte selecionada não oferece um filtro de urgência reconhecível."
-    ))
-  }
+  if (nrow(urgency) == 0L) return(NULL)
 
   field <- urgency$field[[1L]]
   choices <- options$filtros[[field]]
   selected <- resolve_option(choices, c("Urgência", "Urgente", "Emergência"))
-  if (is.null(selected)) {
-    return(list(
-      filters = filters,
-      warnings = "O formulário TABNET não apresentou uma opção explícita de urgência."
-    ))
+  if (is.null(selected)) return(NULL)
+  list(field = field, value = selected$value[[1L]])
+}
+
+add_urgency_filter <- function(filters, options) {
+  urgency <- resolve_urgency_filter(options)
+  if (is.null(urgency)) {
+    stop(
+      "A fonte selecionada não oferece uma opção explícita de urgência.",
+      call. = FALSE
+    )
   }
 
-  filters[[field]] <- unique(c(filters[[field]] %||% character(), selected$value[[1L]]))
+  field <- urgency$field
+  filters[[field]] <- unique(c(filters[[field]] %||% character(), urgency$value))
   list(filters = filters, warnings = character())
 }
 
@@ -106,7 +108,7 @@ execute_tabnet_query <- function(
     arguments = source$arguments
   )
 
-  cached_call(
+  execution <- cached_call(
     namespace = "tabnet-results",
     key = cache_key,
     max_age = 7 * 24 * 60 * 60,
@@ -131,6 +133,17 @@ execute_tabnet_query <- function(
       )
     }
   )
+  fallback <- attr(execution, "cache_fallback")
+  if (!is.null(fallback)) {
+    execution$warnings <- unique(c(
+      execution$warnings,
+      paste0(
+        "A fonte estava indisponível; foi usado o cache local de ",
+        format(fallback$cached_at, "%d/%m/%Y %H:%M"), "."
+      )
+    ))
+  }
+  execution
 }
 
 parse_tabnet_number <- function(x) {
@@ -175,7 +188,7 @@ normalize_tabnet_result <- function(execution, dimension_kind) {
 tabnet_total <- function(normalized) {
   total <- normalized$value[normalized$is_total & !is.na(normalized$value)]
   if (length(total) > 0L) return(sum(total))
-  sum(normalized$value[!normalized$is_total], na.rm = TRUE)
+  sum_or_na(normalized$value[!normalized$is_total])
 }
 
 run_series_by_period <- function(query, geography_option, refresh = FALSE) {
@@ -242,6 +255,7 @@ run_tabnet_bundle <- function(query, refresh = FALSE) {
     query, geography, periods = map_periods, purpose = "map", refresh = refresh
   )
   map_data <- normalize_tabnet_result(map_execution, "geography")
+  map_total <- tabnet_total(map_data)
   map_data <- map_data[!map_data$is_total, , drop = FALSE]
   warnings <- c(warnings, map_execution$warnings)
 
@@ -316,12 +330,13 @@ run_tabnet_bundle <- function(query, refresh = FALSE) {
 
   list(
     map = map_data,
+    total = map_total,
     ranking = ranking_data,
     ranking_kind = ranking_kind,
     series = series_data,
     map_periods = map_periods,
     warnings = unique(warnings[nzchar(warnings)]),
     provenance = provenance,
-    retrieved_at = Sys.time()
+    retrieved_at = map_execution$retrieved_at
   )
 }

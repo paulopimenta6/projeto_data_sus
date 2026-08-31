@@ -71,6 +71,15 @@ write_analysis_geojson <- function(analysis, path) {
 
 write_facilities_geojson <- function(facilities, path) {
   if (is.null(facilities)) stop("Carregue o mapa de estabelecimentos primeiro.", call. = FALSE)
+  geometry_column <- attr(facilities, "sf_column") %||% "geometry"
+  export_columns <- intersect(
+    c(
+      "co_cnes", "facility_name", "name_muni", "code_muni",
+      "facility_type_code", "facility_date", geometry_column
+    ),
+    names(facilities)
+  )
+  facilities <- facilities[, export_columns, drop = FALSE]
   sf::st_write(
     sf::st_transform(facilities, 4326),
     path,

@@ -40,10 +40,17 @@ select_display_metric <- function(bundle, query) {
 summarize_analysis <- function(bundle, query) {
   map <- bundle$map
   valid <- !is.na(map$display_value)
-  total_events <- sum(map$value, na.rm = TRUE)
-  total_denominator <- if ("denominator" %in% names(map)) sum(map$denominator, na.rm = TRUE) else NA_real_
+  total_events <- bundle$total %||% sum_or_na(map$value)
+  observed_events <- !is.na(map$value)
+  complete_denominator <- "denominator" %in% names(map) && any(observed_events) &&
+    all(!is.na(map$denominator[observed_events]))
+  total_denominator <- if (complete_denominator) {
+    sum_or_na(map$denominator[observed_events])
+  } else {
+    NA_real_
+  }
   overall_rate <- if (bundle$metric == "rate") {
-    calculate_crude_rate(total_events, total_denominator)
+    calculate_crude_rate(sum_or_na(map$value[observed_events]), total_denominator)
   } else {
     NA_real_
   }
@@ -118,7 +125,6 @@ run_analysis <- function(query, refresh = FALSE) {
   bundle <- select_display_metric(bundle, query)
   bundle$series <- order_series_data(bundle$series, query)
   bundle$ranking <- dplyr::arrange(bundle$ranking, dplyr::desc(.data$display_value))
-  bundle$ranking <- utils::head(bundle$ranking, 20L)
 
   geometry <- tryCatch(
     join_analysis_geometry(bundle$map, query, bundle$map_periods, refresh),

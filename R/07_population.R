@@ -140,22 +140,34 @@ load_health_region_crosswalk <- function(year, uf = NULL, refresh = FALSE) {
 
 aggregate_population_geography <- function(population, query, year, refresh = FALSE) {
   if (query$geo_level == "municipality") return(population)
+  if (any(is.na(population$geo_code))) {
+    stop("A população contém código municipal ausente ou inválido.", call. = FALSE)
+  }
 
   if (query$geo_level == "state") {
     population$geo_code <- substr(population$geo_code, 1L, 2L)
   } else {
     crosswalk <- load_health_region_crosswalk(year, query$uf, refresh)
+    if (anyDuplicated(crosswalk$municipality_code)) {
+      stop("A malha de regiões de saúde contém municípios duplicados.", call. = FALSE)
+    }
     population <- dplyr::left_join(
-      dplyr::rename(population, municipality_code = .data$geo_code),
+      dplyr::rename(population, municipality_code = "geo_code"),
       crosswalk,
       by = "municipality_code"
     )
+    if (any(is.na(population$geo_code))) {
+      stop(
+        "Nem todos os municípios possuem uma região de saúde compatível.",
+        call. = FALSE
+      )
+    }
   }
 
   population <- dplyr::group_by(population, .data$geo_code, .data$year)
   dplyr::summarise(
     population,
-    population = if (all(is.na(.data$population))) NA_real_ else sum(.data$population, na.rm = TRUE),
+    population = if (any(is.na(.data$population))) NA_real_ else sum(.data$population),
     .groups = "drop"
   )
 }
@@ -166,14 +178,17 @@ fetch_population_panel <- function(query, periods = query$periods, geo_codes = N
   records <- lapply(seq_len(nrow(weights)), function(index) {
     year <- weights$year[[index]]
     result <- tryCatch(
-      fetch_population_municipality(year, query$uf, refresh),
+      {
+        population <- fetch_population_municipality(year, query$uf, refresh)
+        aggregate_population_geography(population, query, year, refresh)
+      },
       error = function(error) error
     )
     if (inherits(result, "error")) {
       warnings <<- c(warnings, paste0("População de ", year, " indisponível: ", conditionMessage(result)))
       return(NULL)
     }
-    aggregate_population_geography(result, query, year, refresh)
+    result
   })
   panel <- dplyr::bind_rows(records)
   if (nrow(panel) == 0L) {
@@ -236,6 +251,41 @@ match_series_years <- function(series, query) {
   years
 }
 
+complete_population_panel <- function(panel, geo_codes, weights) {
+  geo_codes <- unique(stats::na.omit(as.character(geo_codes)))
+  if (length(geo_codes) == 0L || nrow(weights) == 0L) {
+    return(tibble::tibble(
+      geo_code = character(), year = integer(), population = numeric(),
+      weight = numeric(), person_years = numeric()
+    ))
+  }
+
+  expected <- tidyr::expand_grid(
+    geo_code = geo_codes,
+    year = as.integer(weights$year)
+  )
+  required <- c("geo_code", "year", "population")
+  population <- if (all(required %in% names(panel))) {
+    population <- dplyr::select(panel, dplyr::all_of(required))
+    population <- dplyr::group_by(population, .data$geo_code, .data$year)
+    dplyr::summarise(
+      population,
+      population = if (dplyr::n_distinct(.data$population) == 1L) {
+        dplyr::first(.data$population)
+      } else {
+        NA_real_
+      },
+      .groups = "drop"
+    )
+  } else {
+    tibble::tibble(geo_code = character(), year = integer(), population = numeric())
+  }
+  completed <- dplyr::left_join(expected, population, by = c("geo_code", "year"))
+  completed <- dplyr::left_join(completed, weights, by = "year")
+  completed$person_years <- completed$population * completed$weight
+  completed
+}
+
 enrich_bundle_with_rates <- function(bundle, query, refresh = FALSE) {
   if (!is_count_measure(query$measure_label)) {
     bundle$warnings <- unique(c(
@@ -246,42 +296,57 @@ enrich_bundle_with_rates <- function(bundle, query, refresh = FALSE) {
   }
 
   map_codes <- unique(stats::na.omit(bundle$map$geo_code))
-  panel_result <- fetch_population_panel(
+  map_panel_result <- fetch_population_panel(
     query,
     periods = bundle$map_periods,
     geo_codes = map_codes,
     refresh = refresh
   )
-  panel <- panel_result$data
-  bundle$warnings <- unique(c(bundle$warnings, panel_result$warnings))
-  if (nrow(panel) == 0L) return(bundle)
+  map_weights <- query_period_weights(query, bundle$map_periods)
+  map_panel <- complete_population_panel(map_panel_result$data, map_codes, map_weights)
+  bundle$warnings <- unique(c(bundle$warnings, map_panel_result$warnings))
 
-  expected_years <- panel_result$expected_years
-  map_denominator <- dplyr::group_by(panel, .data$geo_code)
+  map_denominator <- dplyr::group_by(map_panel, .data$geo_code)
   map_denominator <- dplyr::summarise(
     map_denominator,
-    observed_years = dplyr::n_distinct(.data$year[!is.na(.data$population)]),
-    denominator = if (all(is.na(.data$person_years))) NA_real_ else sum(.data$person_years, na.rm = TRUE),
+    denominator = if (any(is.na(.data$person_years))) NA_real_ else sum(.data$person_years),
     .groups = "drop"
   )
-  map_denominator$denominator[
-    map_denominator$observed_years < length(expected_years)
-  ] <- NA_real_
   bundle$map <- dplyr::left_join(bundle$map, map_denominator, by = "geo_code")
   bundle$map <- add_rate_columns(bundle$map)
 
-  scope_population <- dplyr::group_by(panel, .data$year)
+  series_panel_result <- fetch_population_panel(
+    query,
+    periods = query$periods,
+    geo_codes = map_codes,
+    refresh = refresh
+  )
+  series_weights <- query_period_weights(query, query$periods)
+  series_panel <- complete_population_panel(
+    series_panel_result$data,
+    map_codes,
+    series_weights
+  )
+  bundle$warnings <- unique(c(bundle$warnings, series_panel_result$warnings))
+
+  scope_population <- dplyr::group_by(series_panel, .data$year)
   scope_population <- dplyr::summarise(
     scope_population,
-    denominator = if (all(is.na(.data$population))) NA_real_ else sum(.data$population, na.rm = TRUE),
+    denominator = if (any(is.na(.data$population))) NA_real_ else sum(.data$population),
     .groups = "drop"
   )
+  if (query$frequency == "monthly") {
+    scope_population$denominator <- scope_population$denominator / 12
+  }
   bundle$series$year <- match_series_years(bundle$series, query)
   bundle$series <- dplyr::left_join(bundle$series, scope_population, by = "year")
   bundle$series <- add_rate_columns(bundle$series)
 
-  complete_panel <- all(expected_years %in% unique(panel$year[!is.na(panel$population)]))
-  ranking_denominator <- if (complete_panel) sum(panel$person_years, na.rm = TRUE) else NA_real_
+  ranking_denominator <- if (nrow(map_panel) > 0L && all(!is.na(map_panel$person_years))) {
+    sum(map_panel$person_years)
+  } else {
+    NA_real_
+  }
   bundle$ranking$denominator <- ranking_denominator
   bundle$ranking <- add_rate_columns(bundle$ranking)
 
@@ -292,6 +357,6 @@ enrich_bundle_with_rates <- function(bundle, query, refresh = FALSE) {
       paste0(missing_map, " território(s) ficaram sem denominador populacional completo.")
     ))
   }
-  bundle$population <- panel
+  bundle$population <- series_panel
   bundle
 }
