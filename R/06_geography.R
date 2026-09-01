@@ -134,19 +134,21 @@ load_geography <- function(query, periods = query$periods, refresh = FALSE) {
         cache = TRUE,
         verbose = FALSE
       )
-      switch(
-        query$geo_level,
-        state = do.call(geobr::read_state, common),
-        municipality = do.call(
-          geobr::read_municipality,
-          c(common, list(code_muni = query$uf %||% "all"))
-        ),
-        health_region = do.call(
-          geobr::read_health_region,
-          c(common, list(
-            code_state = query$uf %||% "all",
-            geometry_level = "micro"
-          ))
+      suppressMessages(
+        switch(
+          query$geo_level,
+          state = do.call(geobr::read_state, common),
+          municipality = do.call(
+            geobr::read_municipality,
+            c(common, list(code_muni = query$uf %||% "all"))
+          ),
+          health_region = do.call(
+            geobr::read_health_region,
+            c(common, list(
+              code_state = query$uf %||% "all",
+              geometry_level = "micro"
+            ))
+          )
         )
       )
     }
@@ -267,13 +269,15 @@ load_health_facilities <- function(query, facility_type = "all", refresh = FALSE
     max_age = 30 * 24 * 60 * 60,
     refresh = refresh,
     function_to_run = function() {
-      geobr::read_health_facilities(
-        date = facility_date,
-        code_muni = query$uf,
-        output = "sf",
-        showProgress = FALSE,
-        cache = TRUE,
-        verbose = FALSE
+      suppressMessages(
+        geobr::read_health_facilities(
+          date = facility_date,
+          code_muni = query$uf,
+          output = "sf",
+          showProgress = FALSE,
+          cache = TRUE,
+          verbose = FALSE
+        )
       )
     }
   )

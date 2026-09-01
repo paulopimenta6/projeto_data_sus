@@ -45,6 +45,19 @@ fetch_datasus_options <- function(domain, dataset, uf = NULL, geo_level = "state
   )
 }
 
+source_filter_choices <- function(options, domain, dataset, field, uf = NULL) {
+  if (is.null(field) || !nzchar(field)) return(NULL)
+  if (identical(attr(options, "provider"), "microdata") || inherits(options, "microdata_options")) {
+    definition <- microdata_source_spec(domain, dataset)$filters[[field]]
+    if (is.null(definition)) {
+      stop("Filtro sem adaptador de microdados: ", field, ".", call. = FALSE)
+    }
+    if (identical(uf, "all") || identical(uf, "")) uf <- NULL
+    return(microdata_filter_choices(definition, uf))
+  }
+  options$filtros[[field]]
+}
+
 resolve_urgency_filter <- function(options) {
   filter_index <- classify_source_filters(options)
   urgency <- filter_index[filter_index$role == "urgency", , drop = FALSE]

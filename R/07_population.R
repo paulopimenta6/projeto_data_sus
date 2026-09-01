@@ -122,15 +122,17 @@ load_health_region_crosswalk <- function(year, uf = NULL, refresh = FALSE) {
     max_age = 365 * 24 * 60 * 60,
     refresh = refresh,
     function_to_run = function() {
-      geobr::read_health_region(
-        year = geometry_year,
-        code_state = uf %||% "all",
-        geometry_level = "municipality",
-        simplified = TRUE,
-        output = "sf",
-        showProgress = FALSE,
-        cache = TRUE,
-        verbose = FALSE
+      suppressMessages(
+        geobr::read_health_region(
+          year = geometry_year,
+          code_state = uf %||% "all",
+          geometry_level = "municipality",
+          simplified = TRUE,
+          output = "sf",
+          showProgress = FALSE,
+          cache = TRUE,
+          verbose = FALSE
+        )
       )
     }
   )

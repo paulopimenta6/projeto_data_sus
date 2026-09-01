@@ -51,9 +51,41 @@ mod_filters_ui <- function(id) {
     shiny::uiOutput(ns("measure_ui")),
     shiny::uiOutput(ns("period_ui")),
     shiny::uiOutput(ns("condition_field_ui")),
-    shiny::uiOutput(ns("condition_values_ui")),
+    shiny::conditionalPanel(
+      condition = "input.condition_field && input.condition_field !== ''",
+      shiny::selectizeInput(
+        ns("condition_values"),
+        "Valor(es) do recorte",
+        choices = NULL,
+        multiple = TRUE,
+        options = list(
+          plugins = list("remove_button"),
+          maxOptions = 100,
+          loadThrottle = 250,
+          create = TRUE,
+          placeholder = "Digite um código ou parte da descrição"
+        )
+      ),
+      ns = ns
+    ),
     shiny::uiOutput(ns("territory_field_ui")),
-    shiny::uiOutput(ns("territory_values_ui")),
+    shiny::conditionalPanel(
+      condition = "input.territory_field && input.territory_field !== ''",
+      shiny::selectizeInput(
+        ns("territory_values"),
+        "Território(s)",
+        choices = NULL,
+        multiple = TRUE,
+        options = list(
+          plugins = list("remove_button"),
+          maxOptions = 100,
+          loadThrottle = 250,
+          create = TRUE,
+          placeholder = "Digite o código ou nome do município"
+        )
+      ),
+      ns = ns
+    ),
     shiny::uiOutput(ns("urgency_ui")),
     shiny::uiOutput(ns("scale_ui")),
     shiny::actionButton(
@@ -131,6 +163,26 @@ mod_filters_server <- function(id) {
       value
     })
 
+    update_filter_input <- function(id, field) {
+      value <- valid_metadata()
+      signature <- attr(value, "app_signature")
+      table <- source_filter_choices(
+        value,
+        domain = signature$domain,
+        dataset = signature$dataset,
+        field = field,
+        uf = signature$uf
+      )
+      choices <- stats::setNames(as.character(table$value), table$id)
+      shiny::updateSelectizeInput(
+        session,
+        id,
+        choices = choices,
+        selected = character(),
+        server = TRUE
+      )
+    }
+
     output$measure_ui <- shiny::renderUI({
       value <- valid_metadata()
       choices <- stats::setNames(as.character(value$conteudo$value), value$conteudo$id)
@@ -170,20 +222,11 @@ mod_filters_server <- function(id) {
       )
     })
 
-    output$condition_values_ui <- shiny::renderUI({
-      value <- valid_metadata()
+    shiny::observeEvent(list(metadata(), input$condition_field), {
       field <- input$condition_field
-      if (is.null(field) || !nzchar(field) || is.null(value$filtros[[field]])) return(NULL)
-      table <- value$filtros[[field]]
-      choices <- stats::setNames(as.character(table$value), table$id)
-      shiny::selectizeInput(
-        session$ns("condition_values"),
-        "Valor(es) do recorte",
-        choices = choices,
-        multiple = TRUE,
-        options = list(plugins = list("remove_button"), maxOptions = 10000, create = TRUE)
-      )
-    })
+      if (is.null(field) || !nzchar(field)) return()
+      update_filter_input("condition_values", field)
+    }, ignoreInit = TRUE)
 
     output$territory_field_ui <- shiny::renderUI({
       value <- valid_metadata()
@@ -199,20 +242,11 @@ mod_filters_server <- function(id) {
       )
     })
 
-    output$territory_values_ui <- shiny::renderUI({
-      value <- valid_metadata()
+    shiny::observeEvent(list(metadata(), input$territory_field), {
       field <- input$territory_field
-      if (is.null(field) || !nzchar(field) || is.null(value$filtros[[field]])) return(NULL)
-      table <- value$filtros[[field]]
-      choices <- stats::setNames(as.character(table$value), table$id)
-      shiny::selectizeInput(
-        session$ns("territory_values"),
-        "Território(s)",
-        choices = choices,
-        multiple = TRUE,
-        options = list(plugins = list("remove_button"), maxOptions = 10000, create = TRUE)
-      )
-    })
+      if (is.null(field) || !nzchar(field)) return()
+      update_filter_input("territory_values", field)
+    }, ignoreInit = TRUE)
 
     output$urgency_ui <- shiny::renderUI({
       value <- valid_metadata()

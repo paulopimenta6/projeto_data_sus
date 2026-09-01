@@ -42,9 +42,64 @@ test_that("provider metadata is local, explicit, and bounded", {
   expect_equal(options$max_periods, 12L)
   expect_true(all(c("internacoes", "obitos_hospitalares", "valor_total") %in% options$conteudo$value))
   expect_true(all(c("diagnostico_cid10", "procedimento_sigtap") %in% names(options$filtros)))
+  expect_equal(nrow(options$filtros$procedimento_sigtap), 0L)
+  expect_equal(nrow(options$filtros$municipio_internacao), 0L)
+  expect_equal(options$filter_choice_types[["procedimento_sigtap"]], "procedure")
   classified <- classify_source_filters(options)
   expect_equal(classified$role[classified$field == "carater_atendimento"], "urgency")
   expect_equal(classified$label[classified$field == "diagnostico_cid10"], "Capítulo do diagnóstico principal (CID-10)")
+})
+
+test_that("large filter choices are loaded lazily for server-side search", {
+  options <- fetch_microdata_options(
+    "sih_morbidade", "geral_internacao", uf = "AC", geo_level = "municipality"
+  )
+  procedures <- source_filter_choices(
+    options, "sih_morbidade", "geral_internacao", "procedimento_sigtap", "AC"
+  )
+  municipalities <- source_filter_choices(
+    options, "sih_morbidade", "geral_internacao", "municipio_internacao", "AC"
+  )
+
+  expect_gt(nrow(procedures), 1000L)
+  expect_gt(nrow(municipalities), 0L)
+  expect_true(all(startsWith(municipalities$value, "12")))
+})
+
+test_that("DBC readers receive only columns required by the query", {
+  query <- new_microdata_sample_query(
+    "sih_morbidade",
+    "geral_internacao",
+    data.frame(id = "Jun/2016", value = "201606"),
+    "internacoes"
+  )
+  spec <- microdata_source_spec(query$domain, query$dataset)
+  expect_setequal(
+    microdata_query_columns(spec, query),
+    c("MUNIC_MOV", "DIAG_PRINC", "ANO_CMPT", "MES_CMPT")
+  )
+
+  query$filters$procedimento_sigtap <- "0303010037"
+  query$urgent_only <- TRUE
+  expect_setequal(
+    microdata_query_columns(spec, query),
+    c("MUNIC_MOV", "DIAG_PRINC", "ANO_CMPT", "MES_CMPT", "PROC_REA", "CAR_INT")
+  )
+  expect_false("VAL_TOT" %in% microdata_query_columns(spec, query))
+})
+
+test_that("national municipality filters process only selected states", {
+  query <- new_microdata_sample_query(
+    "sih_morbidade",
+    "geral_internacao",
+    data.frame(id = "Jun/2016", value = "201606"),
+    "internacoes",
+    uf = NULL
+  )
+  query$filters$municipio_internacao <- c("120040", "355030")
+  spec <- microdata_source_spec(query$domain, query$dataset)
+
+  expect_equal(microdata_query_ufs(query, spec), c("AC", "SP"))
 })
 
 test_that("SIH records aggregate without TABNET and preserve totals", {

@@ -6,9 +6,11 @@ Esta página explica como o painel transforma uma escolha feita na tela em um re
 
 O painel usa os arquivos DBC públicos do DATASUS. Um registro local define, para cada conjunto, quais colunas representam período, território, medida, condição e ranking. Assim, a interface não depende da estrutura variável de formulários web.
 
-O pacote `datasusr` lista e lê os arquivos como rota principal. Se essa rota falhar, `microdatasus` tenta o mesmo recorte. Os arquivos completos ficam no cache DBC, mas somente as colunas necessárias são carregadas. Filtros de CID, procedimento, ocupação, urgência e território são aplicados antes da agregação.
+O pacote `datasusr` lista e lê os arquivos como rota principal. Se essa rota falhar, `microdatasus` tenta o mesmo recorte. Os arquivos completos ficam no cache DBC, mas somente as colunas exigidas pela medida, pelo ranking e pelos filtros ativos são carregadas. Filtros de CID, procedimento, ocupação, urgência e território são aplicados antes da agregação.
 
-Em recortes nacionais publicados por UF, cada estado é processado separadamente para limitar o uso de memória. A análise só é concluída se a identidade de todos os arquivos esperados para cada UF e período for confirmada e todos eles forem lidos; isso também vale para a rota de contingência. Falhas não produzem resultados nacionais parciais. Por esse motivo, o número máximo de períodos depende do sistema e da abrangência.
+Listas extensas de municípios, procedimentos e ocupações são carregadas somente quando o filtro correspondente é escolhido. A pesquisa ocorre no servidor e envia ao navegador apenas um pequeno lote de correspondências, em vez de milhares de opções de uma só vez.
+
+Em recortes nacionais publicados por UF, cada estado é processado separadamente para limitar o uso de memória. Quando há filtro municipal, somente as UFs dos municípios selecionados são abertas. A análise só é concluída se a identidade de todos os arquivos esperados para cada UF e período for confirmada e todos eles forem lidos; isso também vale para a rota de contingência. Falhas não produzem resultados nacionais parciais. Por esse motivo, o número máximo de períodos depende do sistema e da abrangência.
 
 Uma análise pode realizar três consultas:
 

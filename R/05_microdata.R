@@ -331,15 +331,25 @@ load_microdatasus_dataset <- function(name) {
 }
 
 microdata_procedure_lookup <- function() {
+  name <- "procedure_lookup"
+  if (exists(name, envir = MICRODATA_LOOKUPS, inherits = FALSE)) {
+    return(get(name, envir = MICRODATA_LOOKUPS, inherits = FALSE))
+  }
   data <- load_microdatasus_dataset("sigtab")
-  data.frame(
+  result <- data.frame(
     code = as.character(data$COD),
     label = stringi::stri_unescape_unicode(as.character(data$nome_proced)),
     stringsAsFactors = FALSE
   )
+  assign(name, result, envir = MICRODATA_LOOKUPS)
+  result
 }
 
 microdata_occupation_lookup <- function() {
+  name <- "occupation_lookup"
+  if (exists(name, envir = MICRODATA_LOOKUPS, inherits = FALSE)) {
+    return(get(name, envir = MICRODATA_LOOKUPS, inherits = FALSE))
+  }
   cbo <- load_microdatasus_dataset("tabCBO")
   legacy <- load_microdatasus_dataset("tabOcupacao")
   result <- rbind(
@@ -347,20 +357,31 @@ microdata_occupation_lookup <- function() {
     data.frame(code = as.character(legacy$cod), label = as.character(legacy$nome))
   )
   result$label <- stringi::stri_unescape_unicode(result$label)
-  result[!duplicated(result$code), , drop = FALSE]
+  result <- result[!duplicated(result$code), , drop = FALSE]
+  assign(name, result, envir = MICRODATA_LOOKUPS)
+  result
 }
 
 microdata_municipality_lookup <- function(uf = NULL) {
-  data <- load_microdatasus_dataset("tabMun")
-  code6 <- format_integer_code(data$munResCod, 6L)
-  keep <- !is.na(code6) & data$munResTipo == "MUNIC" & data$munResStatus == "ATIVO"
-  if (!is.null(uf) && nzchar(uf)) keep <- keep & substr(code6, 1L, 2L) == uf_code(uf)
-  data.frame(
-    code6 = code6[keep],
-    code7 = normalize_municipality_code(code6[keep]),
-    label = stringi::stri_unescape_unicode(as.character(data$munResNome[keep])),
-    stringsAsFactors = FALSE
-  )
+  name <- "municipality_lookup"
+  if (exists(name, envir = MICRODATA_LOOKUPS, inherits = FALSE)) {
+    result <- get(name, envir = MICRODATA_LOOKUPS, inherits = FALSE)
+  } else {
+    data <- load_microdatasus_dataset("tabMun")
+    code6 <- format_integer_code(data$munResCod, 6L)
+    keep <- !is.na(code6) & data$munResTipo == "MUNIC" & data$munResStatus == "ATIVO"
+    result <- data.frame(
+      code6 = code6[keep],
+      code7 = normalize_municipality_code(code6[keep]),
+      label = stringi::stri_unescape_unicode(as.character(data$munResNome[keep])),
+      stringsAsFactors = FALSE
+    )
+    assign(name, result, envir = MICRODATA_LOOKUPS)
+  }
+  if (!is.null(uf) && nzchar(uf)) {
+    result <- result[substr(result$code6, 1L, 2L) == uf_code(uf), , drop = FALSE]
+  }
+  result
 }
 
 microdata_cnes_unit_lookup <- function() {
@@ -412,6 +433,10 @@ microdata_filter_choices <- function(definition, uf = NULL) {
   )
 }
 
+empty_filter_choices <- function() {
+  data.frame(id = character(), value = character(), stringsAsFactors = FALSE)
+}
+
 microdata_period_options <- function(spec, today = Sys.Date()) {
   current_year <- as.integer(format(today, "%Y"))
   if (spec$frequency %in% c("monthly", "snapshot")) {
@@ -433,7 +458,13 @@ microdata_period_options <- function(spec, today = Sys.Date()) {
 fetch_microdata_options <- function(domain, dataset, uf = NULL, geo_level = "state", refresh = FALSE) {
   if (identical(uf, "all") || identical(uf, "")) uf <- NULL
   spec <- microdata_source_spec(domain, dataset)
-  filters <- lapply(spec$filters, microdata_filter_choices, uf = uf)
+  filters <- lapply(spec$filters, function(definition) {
+    if (definition$choice_type %in% c("fixed", "icd")) {
+      microdata_filter_choices(definition, uf)
+    } else {
+      empty_filter_choices()
+    }
+  })
   max_periods <- if (is.null(uf)) spec$max_periods_national else spec$max_periods_uf
   options <- list(
     linha = data.frame(
@@ -447,6 +478,7 @@ fetch_microdata_options <- function(domain, dataset, uf = NULL, geo_level = "sta
     filtros = filters,
     filter_labels = vapply(spec$filters, `[[`, character(1), "label"),
     filter_roles = vapply(spec$filters, `[[`, character(1), "role"),
+    filter_choice_types = vapply(spec$filters, `[[`, character(1), "choice_type"),
     max_periods = max_periods,
     provider_label = "Microdados DBC (datasusr com contingência microdatasus)",
     source = list(
@@ -497,6 +529,57 @@ microdata_required_columns <- function(spec) {
     measure_columns,
     filter_columns
   ))
+}
+
+microdata_query_columns <- function(spec, query = NULL) {
+  if (is.null(query)) return(microdata_required_columns(spec))
+
+  measure <- spec$measures[spec$measures$value == query$measure_value, , drop = FALSE]
+  if (nrow(measure) != 1L) {
+    stop("Medida de microdados desconhecida: ", query$measure_value, ".", call. = FALSE)
+  }
+  active_filters <- names(query$filters)[vapply(query$filters, function(values) {
+    length(setdiff(as.character(values), c("", "all"))) > 0L
+  }, logical(1))]
+  if (isTRUE(query$urgent_only)) {
+    urgency <- names(spec$filters)[vapply(
+      spec$filters,
+      function(definition) identical(definition$role, "urgency"),
+      logical(1)
+    )]
+    active_filters <- unique(c(active_filters, urgency))
+  }
+  unknown_filters <- setdiff(active_filters, names(spec$filters))
+  if (length(unknown_filters) > 0L) {
+    stop("Filtro sem adaptador de microdados: ", unknown_filters[[1L]], ".", call. = FALSE)
+  }
+  filter_columns <- if (length(active_filters) > 0L) {
+    vapply(spec$filters[active_filters], `[[`, character(1), "column")
+  } else {
+    character()
+  }
+  unique(c(
+    spec$geo_column,
+    spec$ranking$column,
+    spec$period_columns %||% spec$period_column,
+    stats::na.omit(measure$column),
+    filter_columns
+  ))
+}
+
+microdata_query_ufs <- function(query, spec) {
+  if (!isTRUE(spec$uf_files)) return(NA_character_)
+  if (!is.null(query$uf)) return(query$uf)
+
+  territory_codes <- query_territory_codes(query)
+  if (length(territory_codes) == 0L) return(datasusr::datasus_ufs())
+  state_codes <- unique(substr(territory_codes, 1L, 2L))
+  ufs <- datasusr::datasus_ufs()
+  matched <- match(state_codes, vapply(ufs, uf_code, character(1)))
+  if (any(is.na(matched))) {
+    stop("O filtro territorial contém uma UF sem adaptador de microdados.", call. = FALSE)
+  }
+  unname(ufs[matched])
 }
 
 microdata_dbc_cache_directory <- function() {
@@ -632,8 +715,14 @@ standardize_microdata_columns <- function(data) {
   data
 }
 
-fetch_with_datasusr <- function(spec, parts, uf = NULL, refresh = FALSE) {
-  columns <- tolower(microdata_required_columns(spec))
+fetch_with_datasusr <- function(
+  spec,
+  parts,
+  uf = NULL,
+  refresh = FALSE,
+  columns = microdata_required_columns(spec)
+) {
+  columns <- tolower(columns)
   rows <- lapply(split(parts, parts$year), function(periods) {
     list_arguments <- list(
       source = spec$source,
@@ -693,9 +782,9 @@ fetch_with_microdatasus <- function(
   spec,
   parts,
   uf = NULL,
+  columns = microdata_required_columns(spec),
   fetch_function = microdatasus::fetch_datasus
 ) {
-  columns <- microdata_required_columns(spec)
   period_rows <- if (spec$frequency %in% c("monthly", "snapshot")) {
     split(parts, seq_len(nrow(parts)))
   } else {
@@ -752,9 +841,10 @@ fetch_with_microdatasus <- function(
   result
 }
 
-fetch_microdata_slice <- function(spec, parts, uf = NULL, refresh = FALSE) {
+fetch_microdata_slice <- function(spec, parts, uf = NULL, refresh = FALSE, query = NULL) {
+  columns <- microdata_query_columns(spec, query)
   primary <- tryCatch(
-    fetch_with_datasusr(spec, parts, uf, refresh),
+    fetch_with_datasusr(spec, parts, uf, refresh, columns),
     error = function(error) error
   )
   if (!inherits(primary, "error") && nrow(primary) > 0L) {
@@ -769,7 +859,7 @@ fetch_microdata_slice <- function(spec, parts, uf = NULL, refresh = FALSE) {
   }
 
   fallback <- tryCatch(
-    fetch_with_microdatasus(spec, parts, uf),
+    fetch_with_microdatasus(spec, parts, uf, columns),
     error = function(error) error
   )
   if (!inherits(fallback, "error") && nrow(fallback) > 0L) {
@@ -1227,14 +1317,14 @@ combine_microdata_bundles <- function(bundles) {
 run_microdata_bundle_uncached <- function(query, refresh = FALSE) {
   spec <- microdata_source_spec(query$domain, query$dataset)
   parts <- microdata_period_parts(query)
-  ufs <- if (isTRUE(spec$uf_files)) query$uf %||% datasusr::datasus_ufs() else NA_character_
+  ufs <- microdata_query_ufs(query, spec)
   bundles <- vector("list", length(ufs))
   acquisitions <- vector("list", length(ufs))
   fetch_warnings <- character()
 
   for (index in seq_along(ufs)) {
     uf <- if (is.na(ufs[[index]])) NULL else ufs[[index]]
-    fetched <- fetch_microdata_slice(spec, parts, uf, refresh)
+    fetched <- fetch_microdata_slice(spec, parts, uf, refresh, query)
     bundles[[index]] <- aggregate_microdata_bundle(
       fetched$data, query, spec, refresh, complete_dimensions = FALSE
     )
