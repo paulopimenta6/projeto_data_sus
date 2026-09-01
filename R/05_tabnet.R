@@ -1,4 +1,4 @@
-fetch_datasus_options <- function(domain, dataset, uf = NULL, geo_level = "state", refresh = FALSE) {
+fetch_tabnet_options <- function(domain, dataset, uf = NULL, geo_level = "state", refresh = FALSE) {
   config <- get_domain_config(domain)
   if (identical(uf, "all") || identical(uf, "")) uf <- NULL
 
@@ -27,6 +27,21 @@ fetch_datasus_options <- function(domain, dataset, uf = NULL, geo_level = "state
       }
       do.call(datasus::datasus_opcoes, arguments)
     }
+  )
+}
+
+resolve_data_provider <- function(domain, dataset) {
+  if (is_microdata_dataset(domain, dataset)) return("microdata")
+  get_domain_config(domain)$provider %||% "tabnet"
+}
+
+fetch_datasus_options <- function(domain, dataset, uf = NULL, geo_level = "state", refresh = FALSE) {
+  provider <- resolve_data_provider(domain, dataset)
+  switch(
+    provider,
+    microdata = fetch_microdata_options(domain, dataset, uf, geo_level, refresh),
+    tabnet = fetch_tabnet_options(domain, dataset, uf, geo_level, refresh),
+    stop("Provedor de dados desconhecido: ", provider, ".", call. = FALSE)
   )
 }
 
@@ -338,5 +353,14 @@ run_tabnet_bundle <- function(query, refresh = FALSE) {
     warnings = unique(warnings[nzchar(warnings)]),
     provenance = provenance,
     retrieved_at = map_execution$retrieved_at
+  )
+}
+
+run_datasus_bundle <- function(query, refresh = FALSE) {
+  switch(
+    query$provider,
+    microdata = run_microdata_bundle(query, refresh),
+    tabnet = run_tabnet_bundle(query, refresh),
+    stop("Provedor de dados desconhecido: ", query$provider, ".", call. = FALSE)
   )
 }

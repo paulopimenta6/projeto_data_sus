@@ -123,8 +123,10 @@ O painel tem uma área de filtros e quatro abas:
 
 O fluxo normal tem dois botões importantes:
 
-1. **Carregar opções da fonte:** consulta o formulário atual do DATASUS e apresenta medidas, períodos e filtros válidos.
-2. **Analisar:** executa a consulta escolhida e monta os resultados.
+1. **Carregar opções da fonte:** apresenta o catálogo local auditado de medidas, períodos e filtros, sem depender do TABNET.
+2. **Analisar:** baixa os arquivos DBC necessários, aplica os filtros e monta os resultados.
+
+As competências mensais mais recentes podem ser publicadas em datas diferentes para cada sistema ou UF. Se algum arquivo solicitado ainda não existir, a análise para com uma mensagem clara e não entrega um total parcial. Consultas nacionais percorrem as UFs uma por vez e, por isso, aceitam menos períodos que consultas de uma única UF.
 
 ### Exemplo 1: internações por município no Acre
 
@@ -187,7 +189,7 @@ O manifesto registra filtros, períodos, versões, fonte, horário e avisos meto
 ### Como interpretar os mapas
 
 - Uma cor mais escura significa valor maior para a métrica escolhida.
-- Cinza ou **NA** significa que não houve valor compatível, não que o valor seja necessariamente zero.
+- Zero significa que todos os arquivos esperados foram lidos e não houve registro compatível naquele território; cinza ou **NA** indica valor ou denominador indisponível.
 - Um mapa de totais destaca volume; um mapa de taxas facilita comparação proporcional.
 - Diferença de cor não prova que um lugar tem maior risco. Acesso, registro, encaminhamento e organização dos serviços também influenciam os números.
 - O ano dos limites territoriais aparece no painel porque municípios e regiões de saúde podem mudar.
@@ -205,22 +207,25 @@ O manifesto registra filtros, períodos, versões, fonte, horário e avisos meto
 
 | Período | Denominador |
 |---|---|
-| Até 2021 | Estimativa municipal publicada no DATASUS |
+| 1996-1999 | Sem denominador municipal SIDRA configurado; taxa omitida |
+| 2000 | Censo Demográfico 2000, SIDRA tabela 202 |
+| 2001-2006, 2008-2009 e 2011-2021 | Estimativa municipal, SIDRA tabela 6579 |
+| 2010 | Censo Demográfico 2010, SIDRA tabela 608 |
 | 2022 | Censo Demográfico 2022, SIDRA tabela 4709 |
-| 2023 | Taxa omitida quando não existe denominador municipal oficial compatível |
+| 2007 e 2023 | Taxa omitida por ausência de estimativa municipal anual compatível |
 | 2024 em diante | Estimativa municipal, SIDRA tabela 6579 |
 
 Quando vários meses são somados, o painel usa pessoas-ano no denominador geral. Na série mensal, cada ponto usa `1/12` da população anual, de modo que as taxas mensais também são apresentadas por 100 mil pessoas-ano. Intervalos de 95% usam o método exato de Poisson quando o numerador é uma contagem inteira.
 
 ### Fontes e conexão com a internet
 
-Os dados vêm de DATASUS/TABNET, IBGE/SIDRA e `geobr`. O sistema precisa de internet para uma consulta nova. Esses serviços podem ficar lentos ou temporariamente indisponíveis; o painel mostra uma mensagem em vez de transformar a falha em zero.
+Os registros vêm dos arquivos DBC do DATASUS. O pacote `datasusr` é o leitor principal; `microdatasus` fornece uma segunda rota de download e tabelas de municípios, procedimentos e ocupações. Populações vêm do IBGE/SIDRA e limites territoriais do `geobr`. O painel mostra falhas de rede em vez de transformá-las em zero.
 
 ### Cache local
 
-Resultados já consultados ficam em `data/cache/` para acelerar acessos posteriores. O cache contém respostas públicas e não é enviado ao GitHub.
+Arquivos DBC públicos e resultados agregados ficam em `data/cache/` para acelerar acessos posteriores. Cada DBC é identificado pela URL da publicação e por checksum SHA-256, mesmo quando versões preliminares e revisadas possuem o mesmo nome. O cache não é enviado ao GitHub e pode ocupar espaço conforme novos períodos e estados são consultados.
 
-Cada tipo de resultado possui um prazo de atualização. Quando um item já passou desse prazo, o painel tenta consultar a fonte novamente. Se o serviço estiver temporariamente indisponível, o resultado antigo pode ser usado como contingência, sempre com um aviso e com a data do cache. Os mapas de fundo do OpenStreetMap ainda precisam de internet.
+DBCs e resultados agregados são revalidados após 24 horas. Quando um item já passou desse prazo, o painel tenta consultar a fonte novamente. Se o serviço estiver temporariamente indisponível, o resultado agregado antigo pode ser usado como contingência, sempre com um aviso e com a data do cache. Os mapas de fundo do OpenStreetMap ainda precisam de internet.
 
 Para apagar o cache, feche o sistema e remova o conteúdo da pasta `data/cache/`. A consulta seguinte será baixada novamente.
 
@@ -271,7 +276,7 @@ Sim. Em alguns computadores o DuckDB precisa ser compilado e pode ficar vários 
 
 ### 7. O DATASUS demorou ou retornou erro. O sistema está quebrado?
 
-Provavelmente não. O TABNET pode ficar lento ou indisponível. Aguarde alguns minutos e tente novamente. Consultas anteriores podem continuar disponíveis no cache; quando um resultado antigo for usado, o painel mostrará a data dele em um aviso.
+Provavelmente não. Os servidores de arquivos do DATASUS podem ficar lentos ou indisponíveis. Aguarde alguns minutos e tente novamente. Consultas anteriores podem continuar disponíveis no cache; quando um resultado agregado antigo for usado, o painel mostrará a data em um aviso.
 
 ### 8. Por que o painel começa na penúltima competência mensal?
 
@@ -283,7 +288,7 @@ A medida pode não ser uma contagem, a população pode estar indisponível ou o
 
 ### 10. Uma área cinza no mapa significa zero?
 
-Não necessariamente. Cinza indica ausência de valor compatível. Consulte a tabela e os avisos da análise antes de interpretar.
+Não. Depois que todos os arquivos esperados são confirmados, territórios elegíveis sem eventos aparecem com zero. Cinza indica que o valor, o denominador ou a ligação territorial ficou indisponível; consulte a tabela e os avisos da análise.
 
 ### 11. Por que preciso selecionar uma UF para os pontos do CNES?
 

@@ -4,15 +4,21 @@ Esta página explica como o painel transforma uma escolha feita na tela em um re
 
 ## O que o painel consulta
 
-O painel usa tabelas agregadas do TABNET. Em vez de baixar milhões de registros individuais, ele pede ao DATASUS uma tabela já resumida para os filtros escolhidos.
+O painel usa os arquivos DBC públicos do DATASUS. Um registro local define, para cada conjunto, quais colunas representam período, território, medida, condição e ranking. Assim, a interface não depende da estrutura variável de formulários web.
+
+O pacote `datasusr` lista e lê os arquivos como rota principal. Se essa rota falhar, `microdatasus` tenta o mesmo recorte. Os arquivos completos ficam no cache DBC, mas somente as colunas necessárias são carregadas. Filtros de CID, procedimento, ocupação, urgência e território são aplicados antes da agregação.
+
+Em recortes nacionais publicados por UF, cada estado é processado separadamente para limitar o uso de memória. A análise só é concluída se a identidade de todos os arquivos esperados para cada UF e período for confirmada e todos eles forem lidos; isso também vale para a rota de contingência. Falhas não produzem resultados nacionais parciais. Por esse motivo, o número máximo de períodos depende do sistema e da abrangência.
 
 Uma análise pode realizar três consultas:
 
-1. Uma consulta por território para a tabela e o mapa.
-2. Uma consulta por condição, procedimento ou categoria para o ranking.
-3. Uma consulta por mês ou ano para a série temporal.
+1. Uma agregação por território para a tabela e o mapa.
+2. Uma agregação por condição, procedimento ou categoria para o ranking.
+3. Uma agregação por mês ou ano para a série temporal.
 
 Se uma dimensão não estiver disponível, o painel usa uma alternativa e mostra um aviso. Por exemplo, o ranking pode passar a mostrar territórios.
+
+Depois que todos os arquivos são confirmados, competências sem registros compatíveis e territórios elegíveis sem eventos aparecem com valor zero. Uma falha de aquisição ou um arquivo ausente nunca é convertido em zero.
 
 ## O que é um total
 
@@ -24,7 +30,18 @@ Total é a soma da medida escolhida no período e no recorte selecionados. O sig
 - no SINAN, pode ser número de notificações;
 - no CNES, pode ser número de estabelecimentos ou recursos cadastrados.
 
-Linhas chamadas “Total” pelo TABNET são identificadas antes da soma para evitar dupla contagem.
+Cada sistema possui uma redução explícita. SIH e SIM contam registros quando a medida é uma ocorrência; SIA soma quantidades ou valores aprovados/apresentados; CNES conta estabelecimentos distintos ou soma leitos. O total é calculado diretamente sobre o recorte filtrado, sem somar linhas de subtotal.
+
+## Qual território cada sistema representa
+
+O mapa usa uma coluna territorial fixa e documentada por adaptador:
+
+- SIM e SINAN usam município de residência;
+- SIH usa município de processamento/internação (`MUNIC_MOV`);
+- SIA usa município do estabelecimento (`PA_UFMUN`);
+- CNES usa município do estabelecimento (`CODUFMUN`).
+
+Essas escolhas evitam misturar residência com local de atendimento. Para SIH e SIA, uma UF selecionada representa os arquivos processados naquela UF; isso não equivale a medir todos os residentes da UF quando existe atendimento interestadual.
 
 ## O que é uma taxa por 100 mil
 
@@ -62,6 +79,8 @@ Se o código não produzir correspondência, o painel tenta o nome normalizado d
 
 O sistema usa SIRGAS 2000 e transforma o resultado para o formato exigido pelo mapa interativo.
 
+Em análises por região de saúde, numeradores, denominadores e mapa usam uma única referência territorial: o limite disponível mais próximo, sem ultrapassar o ano mais recente da consulta. Isso evita combinar composições regionais de anos diferentes na mesma taxa.
+
 ## Particularidade do CNES
 
 CNES representa estoque cadastrado, não eventos. Quando mais de uma competência é selecionada:
@@ -76,12 +95,15 @@ Pontos inativos, coordenadas não numéricas e coordenadas fora dos limites apro
 
 | Ano | Regra |
 |---|---|
-| Até 2021 | Estimativa municipal do DATASUS |
+| 1996-1999 | Sem denominador municipal SIDRA configurado; taxa ausente |
+| 2000 | Censo 2000, SIDRA tabela 202, variável 93 |
+| 2001-2006, 2008-2009 e 2011-2021 | SIDRA tabela 6579, variável 9324 |
+| 2010 | Censo 2010, SIDRA tabela 608, variável 93 |
 | 2022 | Censo 2022, SIDRA tabela 4709, variável 93 |
-| 2023 | Sem interpolação automática; taxa ausente quando não há denominador |
+| 2007 e 2023 | Sem interpolação automática; taxa ausente |
 | 2024 em diante | SIDRA tabela 6579, variável 9324 |
 
-Se faltar população para qualquer território ou ano necessário, o denominador correspondente fica ausente. Totais estaduais e regionais também ficam ausentes quando algum componente conhecido não possui população. O painel não soma denominadores parciais nem inventa ou interpola valores silenciosamente.
+Se faltar população para qualquer território ou ano necessário, o denominador correspondente fica ausente. Totais estaduais e regionais também ficam ausentes quando algum componente conhecido não possui população. Filtros municipais são aplicados antes dessas agregações, e territórios com zero eventos continuam no denominador. O painel não soma denominadores parciais nem inventa ou interpola valores silenciosamente.
 
 ## Como reproduzir um resultado
 
@@ -89,8 +111,9 @@ O download **Manifesto · JSON** registra:
 
 - fonte e conjunto de dados;
 - medida e períodos;
-- filtros enviados ao TABNET;
+- filtros aplicados localmente aos microdados;
 - data e horário da consulta;
+- arquivos, URLs, tipo de publicação e checksum SHA-256 disponíveis na aquisição;
 - ano dos limites territoriais;
 - versões do R e dos principais pacotes;
 - avisos metodológicos.
@@ -106,7 +129,8 @@ Guarde o manifesto junto com as tabelas e figuras quando precisar documentar uma
 | Denominador | População usada para calcular uma taxa |
 | GeoJSON | Arquivo de dados geográficos que pode ser aberto em programas de mapas |
 | Pessoas-ano | População multiplicada pelo tempo observado |
-| TABNET | Ferramenta pública de tabelas do DATASUS |
+| DBC | Formato comprimido usado nos arquivos públicos do DATASUS |
+| SIGTAP | Tabela de procedimentos, medicamentos e OPM do SUS |
 
 ## Cuidado na interpretação
 

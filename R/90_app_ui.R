@@ -55,8 +55,8 @@ app_ui <- function() {
           htmltools::tags$h2("Escopo, fontes e limitações"),
           htmltools::tags$p(
             paste(
-              "O painel consulta tabelas agregadas do DATASUS para manter análises nacionais viáveis",
-              "e usa registros georreferenciados do CNES para mapas de pontos."
+              "O painel baixa apenas as colunas necessárias dos arquivos DBC públicos, aplica os",
+              "filtros localmente e produz tabelas agregadas para gráficos, mapas e exportações."
             )
           ),
           htmltools::tags$h3("O que significa demanda"),
@@ -72,16 +72,15 @@ app_ui <- function() {
             paste(
               "Taxas brutas utilizam população oficial municipal. Agregações mensais são",
               "expressas por 100 mil pessoas-ano; cada ponto mensal usa um doze avos da",
-              "população anual. O ano de 2023 pode ficar sem taxa por ausência de estimativa",
-              "municipal na série SIDRA 6579."
+              "população anual. Anos sem denominador municipal oficial compatível ficam sem taxa."
             )
           ),
           htmltools::tags$h3("Fontes principais"),
           htmltools::tags$ul(
-            htmltools::tags$li("SIM: mortalidade por causa básica, residência ou ocorrência."),
+            htmltools::tags$li("SIM: mortalidade por causa básica e município de residência."),
             htmltools::tags$li("SIH: internações financiadas pelo SUS e morbidade hospitalar."),
             htmltools::tags$li("SIA: produção ambulatorial aprovada."),
-            htmltools::tags$li("SINAN: agravos de notificação disponíveis no TABNET."),
+            htmltools::tags$li("SINAN: dengue, chikungunya, zika, malária e leptospirose."),
             htmltools::tags$li("CNES: estabelecimentos e capacidade cadastrada por competência.")
           ),
           htmltools::tags$p(

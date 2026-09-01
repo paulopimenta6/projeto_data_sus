@@ -16,7 +16,7 @@ Você não precisa decorar as siglas para usar o painel. Esta página explica, e
 
 O SIM reúne informações das declarações de óbito. Ele permite analisar causas CID-10, ano, residência e local de ocorrência.
 
-Use **residência** para estudar onde viviam as pessoas. Use **ocorrência** para estudar onde os óbitos aconteceram. Os dois recortes respondem a perguntas diferentes.
+Use **residência** para estudar onde viviam as pessoas. Use **ocorrência** para estudar onde os óbitos aconteceram. Os dois recortes respondem a perguntas diferentes; nesta versão, o mapa do painel usa residência.
 
 Os dados costumam ser anuais e podem ser revisados.
 
@@ -55,10 +55,12 @@ O denominador vem de fontes oficiais:
 
 | Ano | Fonte usada |
 |---|---|
-| Até 2021 | Estimativa municipal do DATASUS |
+| 1996-1999 | Sem denominador municipal SIDRA configurado; a taxa fica ausente |
+| 2000 e 2010 | Censos Demográficos, IBGE/SIDRA |
+| 2001-2006, 2008-2009 e 2011-2021 | Estimativas municipais, IBGE/SIDRA |
 | 2022 | Censo Demográfico 2022, IBGE/SIDRA |
-| 2023 | Sem estimativa municipal anual compatível; a taxa pode ficar ausente |
-| 2024 em diante | Estimativa municipal do IBGE/SIDRA |
+| 2007 e 2023 | Sem estimativa municipal anual compatível; a taxa fica ausente |
+| 2024 em diante | Estimativas municipais, IBGE/SIDRA |
 
 ## Limites dos mapas
 
@@ -66,8 +68,10 @@ Estados, municípios e regiões de saúde vêm do `geobr`, com base em referênc
 
 Limites podem mudar. Um município criado ou alterado depois do período analisado pode exigir cautela em comparações históricas.
 
+Para regiões de saúde, a mesma referência territorial é usada no numerador, no denominador e no mapa durante toda a análise.
+
 ## Quando uma fonte fica indisponível
 
-DATASUS, SIDRA e os arquivos espaciais são serviços externos. Eles podem ficar lentos, mudar um formulário ou interromper o acesso por algum tempo.
+DATASUS, SIDRA e os arquivos espaciais são serviços externos. Eles podem ficar lentos, alterar arquivos ou interromper o acesso por algum tempo.
 
-O painel nunca transforma uma falha de rede em zero. Ele mostra o erro ou um aviso e preserva no cache apenas respostas concluídas com sucesso. Se já existir uma resposta antiga completa, ela pode ser usada como contingência quando a atualização falhar; nesse caso, a data do cache é informada.
+O painel nunca transforma uma falha de rede em zero. Zeros só são preenchidos depois que todos os arquivos esperados por UF e período foram identificados e lidos. O cache DBC distingue a URL de cada publicação, registra checksum SHA-256 e tenta renovar os arquivos após 24 horas, evitando confundir versões preliminares e revisadas com o mesmo nome. Se já existir um resultado agregado antigo e completo, ele pode ser usado como contingência quando a atualização falhar; nesse caso, a data do cache é informada.

@@ -17,7 +17,7 @@ new_datasus_query <- function(
   if (identical(uf, "all") || identical(uf, "")) uf <- NULL
 
   if (!is.data.frame(periods) || !all(c("id", "value") %in% names(periods))) {
-    stop("Os períodos devem conter rótulos e valores TABNET.", call. = FALSE)
+    stop("Os períodos devem conter rótulos e valores da fonte.", call. = FALSE)
   }
   if (nrow(periods) == 0L) stop("Selecione ao menos um período.", call. = FALSE)
   if (nrow(periods) > 120L) stop("Selecione no máximo 120 competências.", call. = FALSE)
@@ -35,6 +35,7 @@ new_datasus_query <- function(
     domain = domain,
     domain_label = config$label,
     system = config$system,
+    provider = attr(options, "provider") %||% config$provider %||% "tabnet",
     source_function = config$source_function,
     frequency = config$frequency,
     dataset = as.character(dataset),
@@ -60,7 +61,7 @@ new_datasus_query <- function(
 
 validate_datasus_query <- function(query) {
   required <- c(
-    "domain", "system", "source_function", "dataset", "geo_level",
+    "domain", "system", "provider", "source_function", "dataset", "geo_level",
     "measure_value", "periods", "filters", "scale"
   )
   missing <- setdiff(required, names(query))
@@ -75,6 +76,14 @@ validate_datasus_query <- function(query) {
   if (query$domain == "sim" && query$geo_level == "state" && !is.null(query$uf)) {
     stop(
       "No SIM agregado por UF, deixe a abrangência em Brasil; use municípios para detalhar uma UF.",
+      call. = FALSE
+    )
+  }
+  max_periods <- query$options$max_periods %||% 120L
+  if (nrow(query$periods) > max_periods) {
+    stop(
+      "Este recorte permite no máximo ", max_periods,
+      " período(s) por consulta de microdados.",
       call. = FALSE
     )
   }
@@ -176,11 +185,36 @@ query_period_weights <- function(query, periods = query$periods) {
   data.frame(year = sort(unique(years)), weight = 1, stringsAsFactors = FALSE)
 }
 
+query_territory_codes <- function(query) {
+  filter_index <- classify_source_filters(query$options %||% list())
+  territory_fields <- intersect(
+    filter_index$field[filter_index$role == "territory"],
+    names(query$filters)
+  )
+  if (length(territory_fields) == 0L) return(character())
+
+  values <- unique(unlist(query$filters[territory_fields], use.names = FALSE))
+  values <- as.character(values)
+  values <- values[nzchar(trimws(values)) & normalize_text(values) != "all"]
+  if (length(values) == 0L) return(character())
+
+  leading <- extract_leading_code(values, 6L, 7L)
+  codes <- normalize_municipality_code(leading)
+  if (any(is.na(codes))) {
+    stop(
+      "O filtro territorial contém código municipal ausente ou inválido.",
+      call. = FALSE
+    )
+  }
+  unique(codes)
+}
+
 query_to_manifest <- function(query) {
   list(
     domain = query$domain,
     domain_label = query$domain_label,
     system = query$system,
+    provider = query$provider,
     dataset = query$dataset,
     uf = query$uf %||% "Brasil",
     geo_level = query$geo_level,
@@ -196,7 +230,7 @@ query_to_manifest <- function(query) {
 is_count_measure <- function(label) {
   normalized <- normalize_text(label)
   grepl(
-    "obit|intern|aih|caso|notific|quant|qtd|estabelec|leito|atendimento|proced",
+    "obit|intern|aih|caso|notific|quant|qtd|estabelec|leito|atendimento|proced|registro",
     normalized
   ) && !grepl("valor|custo|media|taxa|percent|propor", normalized)
 }

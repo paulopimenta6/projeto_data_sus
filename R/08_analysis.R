@@ -116,7 +116,7 @@ build_analysis_manifest <- function(query, bundle, geometry) {
 
 run_analysis <- function(query, refresh = FALSE) {
   validate_datasus_query(query)
-  bundle <- run_tabnet_bundle(query, refresh)
+  bundle <- run_datasus_bundle(query, refresh)
   bundle$map <- normalize_geographic_data(bundle$map, query$geo_level)
 
   if (query$scale == "rate") {
@@ -139,7 +139,7 @@ run_analysis <- function(query, refresh = FALSE) {
   if (!is.null(geometry$unmatched) && nrow(geometry$unmatched) > 0L) {
     bundle$warnings <- unique(c(
       bundle$warnings,
-      paste0(nrow(geometry$unmatched), " linha(s) do TABNET não encontraram geometria correspondente.")
+      paste0(nrow(geometry$unmatched), " território(s) da fonte não encontraram geometria correspondente.")
     ))
   }
 

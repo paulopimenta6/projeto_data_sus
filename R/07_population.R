@@ -12,22 +12,6 @@ find_column_by_name <- function(data, candidates) {
   NULL
 }
 
-normalize_population_tabnet <- function(data, year, uf = NULL) {
-  labels <- as.character(data[[1L]])
-  numeric_data <- as.data.frame(lapply(data[-1L], parse_tabnet_number), check.names = FALSE)
-  values <- rowSums(numeric_data, na.rm = TRUE)
-  values[rowSums(!is.na(numeric_data)) == 0L] <- NA_real_
-  codes <- normalize_municipality_code(extract_leading_code(labels, 6L, 7L))
-  keep <- !is.na(codes) & !grepl("^total", normalize_text(labels))
-  result <- tibble::tibble(
-    geo_code = codes[keep],
-    year = as.integer(year),
-    population = values[keep]
-  )
-  if (!is.null(uf)) result <- result[substr(result$geo_code, 1L, 2L) == uf_code(uf), , drop = FALSE]
-  result
-}
-
 uf_code <- function(uf) {
   state_codes <- c(
     RO = "11", AC = "12", AM = "13", RR = "14", PA = "15", AP = "16", TO = "17",
@@ -38,12 +22,20 @@ uf_code <- function(uf) {
   unname(state_codes[toupper(uf)])
 }
 
-collect_sidra_population <- function(year, table, variable) {
+collect_sidra_population <- function(
+  year,
+  table,
+  variable,
+  classific = "all",
+  category = "all"
+) {
   query <- sidrar::sidra_query(
     x = table,
     variable = variable,
     period = as.character(year),
     geo = "City",
+    classific = classific,
+    category = category,
     header = FALSE,
     format = 1,
     value_type = "both"
@@ -58,18 +50,23 @@ collect_sidra_population <- function(year, table, variable) {
 
   codes <- format_integer_code(data[[code_column]], 7L)
   values <- suppressWarnings(as.numeric(as.character(data[[value_column]])))
-  tibble::tibble(
+  result <- tibble::tibble(
     geo_code = codes,
     year = as.integer(year),
     population = values
   )
+  result <- result[!is.na(result$geo_code), , drop = FALSE]
+  if (anyDuplicated(result$geo_code)) {
+    stop("A resposta SIDRA contém mais de uma população para o mesmo município.", call. = FALSE)
+  }
+  result
 }
 
 fetch_population_municipality <- function(year, uf = NULL, refresh = FALSE) {
   year <- as.integer(year)
   key <- list(
-    datasus_version = safe_package_version("datasus"),
     sidrar_version = safe_package_version("sidrar"),
+    source_rules_version = 2L,
     year = year,
     uf = uf
   )
@@ -80,26 +77,31 @@ fetch_population_municipality <- function(year, uf = NULL, refresh = FALSE) {
     max_age = 365 * 24 * 60 * 60,
     refresh = refresh,
     function_to_run = function() {
-      if (year <= 2021L) {
-        data <- datasus::populacao_residente(
-          conjunto = "estimativa_municipal",
-          uf = uf,
-          linha = "Município",
-          conteudo = 1,
-          periodo = year
+      if (year == 2000L) {
+        result <- collect_sidra_population(
+          year, table = 202, variable = 93,
+          classific = c("c1", "c2"), category = list(0, 0)
         )
-        return(normalize_population_tabnet(data, year, uf))
-      }
-
-      if (year == 2022L) {
+      } else if (year == 2010L) {
+        result <- collect_sidra_population(
+          year, table = 608, variable = 93,
+          classific = c("c1", "c2"), category = list(0, 0)
+        )
+      } else if (year == 2022L) {
         result <- collect_sidra_population(year, table = 4709, variable = 93)
       } else if (year == 2023L) {
         stop(
           "Não há estimativa municipal anual oficial na tabela SIDRA 6579 para 2023.",
           call. = FALSE
         )
-      } else {
+      } else if (year >= 2001L) {
+        unavailable <- c(2007L)
+        if (year %in% unavailable) {
+          stop("Não há estimativa municipal anual na tabela SIDRA 6579 para ", year, ".", call. = FALSE)
+        }
         result <- collect_sidra_population(year, table = 6579, variable = 9324)
+      } else {
+        stop("Não há denominador municipal SIDRA configurado para ", year, ".", call. = FALSE)
       }
       if (!is.null(uf)) result <- result[substr(result$geo_code, 1L, 2L) == uf_code(uf), , drop = FALSE]
       result
@@ -134,11 +136,18 @@ load_health_region_crosswalk <- function(year, uf = NULL, refresh = FALSE) {
   )
   tibble::tibble(
     municipality_code = format_integer_code(crosswalk$code_muni, 7L),
-    geo_code = format_integer_code(crosswalk$code_health_region)
+    geo_code = format_integer_code(crosswalk$code_health_region),
+    geo_name = as.character(crosswalk$name_health_region)
   )
 }
 
-aggregate_population_geography <- function(population, query, year, refresh = FALSE) {
+aggregate_population_geography <- function(
+  population,
+  query,
+  year,
+  refresh = FALSE,
+  reference_year = analysis_reference_year(query)
+) {
   if (query$geo_level == "municipality") return(population)
   if (any(is.na(population$geo_code))) {
     stop("A população contém código municipal ausente ou inválido.", call. = FALSE)
@@ -147,7 +156,7 @@ aggregate_population_geography <- function(population, query, year, refresh = FA
   if (query$geo_level == "state") {
     population$geo_code <- substr(population$geo_code, 1L, 2L)
   } else {
-    crosswalk <- load_health_region_crosswalk(year, query$uf, refresh)
+    crosswalk <- load_health_region_crosswalk(reference_year, query$uf, refresh)
     if (anyDuplicated(crosswalk$municipality_code)) {
       stop("A malha de regiões de saúde contém municípios duplicados.", call. = FALSE)
     }
@@ -174,13 +183,25 @@ aggregate_population_geography <- function(population, query, year, refresh = FA
 
 fetch_population_panel <- function(query, periods = query$periods, geo_codes = NULL, refresh = FALSE) {
   weights <- query_period_weights(query, periods)
+  territory_codes <- query_territory_codes(query)
+  reference_year <- analysis_reference_year(query)
   warnings <- character()
   records <- lapply(seq_len(nrow(weights)), function(index) {
     year <- weights$year[[index]]
     result <- tryCatch(
       {
         population <- fetch_population_municipality(year, query$uf, refresh)
-        aggregate_population_geography(population, query, year, refresh)
+        if (length(territory_codes) > 0L) {
+          population <- population[
+            population$geo_code %in% territory_codes,
+            ,
+            drop = FALSE
+          ]
+        }
+        aggregate_population_geography(
+          population, query, year, refresh,
+          reference_year = reference_year
+        )
       },
       error = function(error) error
     )
@@ -286,6 +307,31 @@ complete_population_panel <- function(panel, geo_codes, weights) {
   completed
 }
 
+complete_geographic_rows <- function(data, geo_codes, query, refresh = FALSE) {
+  geo_codes <- unique(stats::na.omit(as.character(geo_codes)))
+  missing_codes <- setdiff(geo_codes, data$geo_code)
+  if (length(missing_codes) == 0L) return(data)
+
+  names <- stats::setNames(character(), character())
+  if (identical(query$provider, "microdata")) {
+    universe <- microdata_geography_universe(query, refresh)
+    names <- stats::setNames(universe$geo_name, universe$geo_code)
+  }
+  missing_names <- unname(names[missing_codes])
+  missing_names[is.na(missing_names) | !nzchar(missing_names)] <- missing_codes[
+    is.na(missing_names) | !nzchar(missing_names)
+  ]
+  dplyr::bind_rows(
+    data,
+    tibble::tibble(
+      geo_code = missing_codes,
+      geo_name = missing_names,
+      normalized_name = normalize_text(missing_names),
+      value = 0
+    )
+  )
+}
+
 enrich_bundle_with_rates <- function(bundle, query, refresh = FALSE) {
   if (!is_count_measure(query$measure_label)) {
     bundle$warnings <- unique(c(
@@ -295,13 +341,16 @@ enrich_bundle_with_rates <- function(bundle, query, refresh = FALSE) {
     return(bundle)
   }
 
-  map_codes <- unique(stats::na.omit(bundle$map$geo_code))
   map_panel_result <- fetch_population_panel(
     query,
     periods = bundle$map_periods,
-    geo_codes = map_codes,
     refresh = refresh
   )
+  map_codes <- union(
+    unique(stats::na.omit(bundle$map$geo_code)),
+    unique(stats::na.omit(map_panel_result$data$geo_code))
+  )
+  bundle$map <- complete_geographic_rows(bundle$map, map_codes, query, refresh)
   map_weights <- query_period_weights(query, bundle$map_periods)
   map_panel <- complete_population_panel(map_panel_result$data, map_codes, map_weights)
   bundle$warnings <- unique(c(bundle$warnings, map_panel_result$warnings))
@@ -318,13 +367,16 @@ enrich_bundle_with_rates <- function(bundle, query, refresh = FALSE) {
   series_panel_result <- fetch_population_panel(
     query,
     periods = query$periods,
-    geo_codes = map_codes,
     refresh = refresh
+  )
+  series_codes <- union(
+    map_codes,
+    unique(stats::na.omit(series_panel_result$data$geo_code))
   )
   series_weights <- query_period_weights(query, query$periods)
   series_panel <- complete_population_panel(
     series_panel_result$data,
-    map_codes,
+    series_codes,
     series_weights
   )
   bundle$warnings <- unique(c(bundle$warnings, series_panel_result$warnings))

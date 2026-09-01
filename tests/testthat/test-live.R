@@ -1,24 +1,27 @@
-test_that("live DATASUS metadata remains readable", {
+test_that("live DATASUS microdata remains readable", {
   skip_if(Sys.getenv("RUN_LIVE_DATASUS_TESTS") != "true", "Set RUN_LIVE_DATASUS_TESTS=true")
-  previous <- options(datasus.timeout = 60, datasus.max_tries = 2)
-  on.exit(options(previous), add = TRUE)
-  source_options <- tryCatch(
-    fetch_datasus_options("sim", "obitos", geo_level = "state", refresh = TRUE),
+  source_data <- tryCatch(
+    {
+      spec <- microdata_source_spec("sih_morbidade", "geral_internacao")
+      parts <- data.frame(
+        label = "Jan/2024", key = "202401", year = 2024L, month = 1L,
+        stringsAsFactors = FALSE
+      )
+      fetch_microdata_slice(spec, parts, uf = "AC", refresh = TRUE)
+    },
     error = function(error) error
   )
-  if (inherits(source_options, "error")) {
-    message <- conditionMessage(source_options)
+  if (inherits(source_data, "error")) {
+    message <- conditionMessage(source_data)
     unavailable <- grepl(
-      "TABNET request failed|timeout|failed to perform HTTP|could not resolve|HTTP status",
+      "timeout|failed|could not resolve|HTTP status|FTP|connection|transfer",
       message,
       ignore.case = TRUE
     )
     if (unavailable) skip(paste("DATASUS indisponível:", message))
-    stop(source_options)
+    stop(source_data)
   }
-  expect_s3_class(source_options, "datasus_opcoes")
-  expect_true(all(
-    c("linha", "conteudo", "periodo", "filtros") %in% names(source_options)
-  ))
-  expect_true(nrow(source_options$periodo) > 0L)
+  expect_true(source_data$provider %in% c("datasusr", "microdatasus"))
+  expect_gt(nrow(source_data$data), 0L)
+  expect_true(all(c("ANO_CMPT", "MES_CMPT", "MUNIC_MOV", "DIAG_PRINC") %in% names(source_data$data)))
 })

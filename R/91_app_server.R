@@ -7,7 +7,7 @@ app_server <- function(input, output, session) {
       result <- tryCatch(
         {
           query <- filter_state$query()
-          shiny::incProgress(0.2, detail = "Consultando tabelas agregadas")
+          shiny::incProgress(0.2, detail = "Baixando e agregando registros públicos")
           value <- run_analysis(query)
           shiny::incProgress(0.7, detail = "Preparando indicadores e mapas")
           value

@@ -15,9 +15,9 @@ O `prepare_environment.R` lê esses arquivos, instala bibliotecas do Ubuntu/Debi
 
 | Pacote | Versão registrada | Publicação verificada | Função no projeto |
 |---|---:|---:|---|
-| `datasus` | 0.16.1 | 05/08/2026 | Consulta agregada e descoberta de filtros TABNET |
-| `datasusr` | 0.1.0 | 04/05/2026 | Leitura rápida de DBC disponível no ambiente reproduzível |
-| `microdatasus` | 3.0.0 | 29/07/2026 | Processamento de microdados disponível para extensões |
+| `datasus` | 0.16.1 | 05/08/2026 | Compatibilidade legada e normalização de códigos territoriais |
+| `datasusr` | 0.1.0 | 04/05/2026 | Catálogo, download com cache e leitura principal dos arquivos DBC |
+| `microdatasus` | 3.0.0 | 29/07/2026 | Download de contingência e dicionários de municípios, SIGTAP e CBO |
 | `geobr` | 2.0.1 | 23/06/2026 | Limites territoriais e estabelecimentos |
 | `sidrar` | 0.5.0 | 26/08/2026 | População municipal do IBGE/SIDRA |
 | `leaflet` | 2.2.3 | - | Mapas interativos |
@@ -38,9 +38,11 @@ Fixar o commit impede que uma mudança futura no repositório altere silenciosam
 
 ## Qual caminho de dados o painel usa
 
-A interface atual usa `datasus` para consultar tabelas agregadas do TABNET. Esse caminho responde rapidamente às escolhas feitas na tela e evita carregar milhões de registros na memória.
+A interface usa um registro explícito de fontes para SIM-DO, SIH-RD, SIA-PA, CNES-ST/LT e agravos selecionados do SINAN. As opções da tela são locais e não dependem da leitura de formulários web.
 
-Os pacotes `microdatasus` e `datasusr` trabalham com microdados DBC, isto é, registros individuais ou arquivos brutos. Eles estão registrados no ambiente para estudos que precisem desse nível de detalhe, mas a interface atual não baixa microdados nem mistura registros individuais com as tabelas agregadas. Essa separação é intencional e está descrita em `docs/metodologia.md`.
+Na análise, `datasusr` lista, baixa para `data/cache/dbc/` e lê somente as colunas necessárias. Se essa rota falhar, o mesmo recorte é tentado com `microdatasus`. Os registros são filtrados e agregados em memória; apenas os agregados alimentam mapas, gráficos e exportações. Consultas nacionais são processadas por UF e possuem limites menores de período para controlar memória, rede e tempo de execução.
+
+O código de TABNET permanece isolado como compatibilidade legada, mas nenhum conjunto oferecido pela interface depende dele. Denominadores populacionais também são obtidos pelo SIDRA, sem consulta TABNET.
 
 ## Compatibilidade do R
 

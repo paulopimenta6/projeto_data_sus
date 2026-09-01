@@ -25,7 +25,7 @@ mod_filters_ui <- function(id) {
       class = "filter-intro",
       htmltools::tags$p(class = "eyebrow", "CONSULTA ORIENTADA"),
       htmltools::tags$h2("Defina o recorte"),
-      htmltools::tags$p("Os campos disponíveis são lidos diretamente do formulário atual do TABNET.")
+      htmltools::tags$p("Os campos são definidos por adaptadores auditáveis dos arquivos públicos do DATASUS.")
     ),
     shiny::selectInput(ns("domain"), "Tema", choices = domain_choices(), selected = "sih_morbidade"),
     shiny::uiOutput(ns("dataset_ui")),
@@ -94,7 +94,7 @@ mod_filters_server <- function(id) {
       if (is.null(signature$dataset) || !nzchar(signature$dataset)) {
         return(options_error(simpleError("Selecione um conjunto de dados.")))
       }
-      shiny::withProgress(message = "Consultando o formulário TABNET...", value = 0.3, {
+      shiny::withProgress(message = "Preparando opções da fonte...", value = 0.3, {
         result <- tryCatch(
           fetch_datasus_options(
             domain = signature$domain,
@@ -119,7 +119,8 @@ mod_filters_server <- function(id) {
         class = "source-status source-ok",
         paste0(
           nrow(value$periodo), " períodos, ", nrow(value$conteudo),
-          " medidas e ", length(value$filtros), " filtros disponíveis."
+          " medidas e ", length(value$filtros), " filtros disponíveis · ",
+          value$provider_label %||% "DATASUS"
         )
       )
     })
@@ -147,7 +148,11 @@ mod_filters_server <- function(id) {
         choices = choices,
         selected = selected,
         multiple = TRUE,
-        options = list(plugins = list("remove_button"), maxItems = 120, maxOptions = 1000)
+        options = list(
+          plugins = list("remove_button"),
+          maxItems = value$max_periods %||% 120,
+          maxOptions = 1000
+        )
       )
     })
 
@@ -176,7 +181,7 @@ mod_filters_server <- function(id) {
         "Valor(es) do recorte",
         choices = choices,
         multiple = TRUE,
-        options = list(plugins = list("remove_button"), maxOptions = 10000)
+        options = list(plugins = list("remove_button"), maxOptions = 10000, create = TRUE)
       )
     })
 
@@ -205,7 +210,7 @@ mod_filters_server <- function(id) {
         "Território(s)",
         choices = choices,
         multiple = TRUE,
-        options = list(plugins = list("remove_button"), maxOptions = 10000)
+        options = list(plugins = list("remove_button"), maxOptions = 10000, create = TRUE)
       )
     })
 

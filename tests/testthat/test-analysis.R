@@ -28,11 +28,11 @@ test_that("analysis composes normalized data, summary, and manifest", {
     provenance = list(),
     retrieved_at = Sys.time()
   )
-  original_run_bundle <- run_tabnet_bundle
+  original_run_bundle <- run_datasus_bundle
   original_join_geometry <- join_analysis_geometry
-  on.exit(assign("run_tabnet_bundle", original_run_bundle, envir = globalenv()), add = TRUE)
+  on.exit(assign("run_datasus_bundle", original_run_bundle, envir = globalenv()), add = TRUE)
   on.exit(assign("join_analysis_geometry", original_join_geometry, envir = globalenv()), add = TRUE)
-  assign("run_tabnet_bundle", function(query, refresh = FALSE) bundle, envir = globalenv())
+  assign("run_datasus_bundle", function(query, refresh = FALSE) bundle, envir = globalenv())
   assign(
     "join_analysis_geometry",
     function(map_data, query, periods, refresh = FALSE) {
