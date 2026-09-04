@@ -53,3 +53,22 @@ test_that("SIM state query rejects a simultaneous UF restriction", {
     "deixe a abrangência em Brasil"
   )
 })
+
+test_that("query records map, comparison, and explicit measure contracts", {
+  query <- mock_query()
+  expect_equal(query$measure_spec$measure_type, "count")
+  expect_true(query$measure_spec$rate_eligible)
+  expect_equal(query$comparison, "auto")
+  expect_equal(query$map_method, "quantile")
+
+  options <- mock_options()
+  options$conteudo$standardizable <- FALSE
+  expect_error(
+    new_datasus_query(
+      "sih_morbidade", "geral_internacao", "AC", "municipality",
+      options$conteudo, options$periodo, options,
+      scale = "age_standardized_rate"
+    ),
+    "não permite padronização"
+  )
+})

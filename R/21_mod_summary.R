@@ -1,6 +1,9 @@
 metric_value_text <- function(value, metric = "count") {
   if (is.na(value)) return("Sem dado")
-  format_pt_number(value, accuracy = if (metric == "rate") 0.1 else 1)
+  format_pt_number(
+    value,
+    accuracy = if (metric %in% c("rate", "age_standardized_rate", "proportion")) 0.1 else 1
+  )
 }
 
 kpi_card <- function(label, value, note = NULL, accent = "teal") {
@@ -17,7 +20,9 @@ mod_summary_ui <- function(id) {
   htmltools::tagList(
     shiny::uiOutput(ns("query_heading")),
     shiny::uiOutput(ns("kpis")),
-    shiny::uiOutput(ns("warnings"))
+    shiny::uiOutput(ns("warnings")),
+    shiny::uiOutput(ns("insights")),
+    shiny::uiOutput(ns("quality"))
   )
 }
 
@@ -34,7 +39,7 @@ mod_summary_server <- function(id, analysis) {
             paste0(
               value$query$measure_label, " · ",
               paste(value$query$periods$id, collapse = ", "), " · ",
-              value$query$uf %||% "Brasil"
+              value$query$uf %||% "Brasil", " · ", value$geography_semantics
             )
           )
         ),
@@ -48,13 +53,14 @@ mod_summary_server <- function(id, analysis) {
     output$kpis <- shiny::renderUI({
       value <- require_analysis_value(analysis())
       summary <- value$summary
-      second_label <- if (summary$metric == "rate") "Taxa geral" else "Competências"
-      second_value <- if (summary$metric == "rate") {
-        metric_value_text(summary$overall_rate, "rate")
+      rate_metric <- summary$metric %in% c("rate", "age_standardized_rate")
+      second_label <- if (rate_metric) "Taxa geral" else "Competências"
+      second_value <- if (rate_metric) {
+        metric_value_text(summary$overall_rate, summary$metric)
       } else {
         as.character(summary$periods)
       }
-      second_note <- if (summary$metric == "rate") {
+      second_note <- if (rate_metric) {
         sub("^Taxa ", "", summary$metric_label)
       } else {
         summary$latest_period
@@ -68,7 +74,12 @@ mod_summary_server <- function(id, analysis) {
 
       htmltools::tags$div(
         class = "kpi-grid",
-        kpi_card("Total registrado", metric_value_text(summary$total), value$query$measure_label, "navy"),
+        kpi_card(
+          if (value$measure_spec$measure_type == "proportion") "Indicador no recorte" else "Total registrado",
+          metric_value_text(summary$total, value$measure_spec$measure_type),
+          value$query$measure_label,
+          "navy"
+        ),
         kpi_card(second_label, second_value, second_note, "gold"),
         kpi_card(
           "Maior valor territorial",
@@ -77,9 +88,12 @@ mod_summary_server <- function(id, analysis) {
           "teal"
         ),
         kpi_card(
-          "Territórios com dados",
+          "Territórios avaliados",
           format_pt_number(summary$territories_with_data),
-          geography_note,
+          paste0(
+            geography_note, " · ", summary$territories_zero, " zero · ",
+            summary$territories_missing, " sem dado"
+          ),
           "coral"
         )
       )
@@ -88,18 +102,68 @@ mod_summary_server <- function(id, analysis) {
     output$warnings <- shiny::renderUI({
       value <- analysis()
       if (is.null(value)) return(NULL)
-      if (inherits(value, "datasus_analysis_error")) {
-        return(htmltools::tags$div(
-          class = "analysis-alert alert-error",
-          htmltools::tags$strong("A consulta não foi concluída."),
-          htmltools::tags$p(value$message)
-        ))
-      }
+      if (inherits(value, "datasus_analysis_error")) return(NULL)
       if (length(value$warnings) == 0L) return(NULL)
       htmltools::tags$details(
         class = "analysis-alert alert-warning",
+        open = "open",
         htmltools::tags$summary(paste(length(value$warnings), "aviso(s) metodológico(s)")),
         htmltools::tags$ul(lapply(value$warnings, htmltools::tags$li))
+      )
+    })
+
+    output$insights <- shiny::renderUI({
+      value <- require_analysis_value(analysis())
+      if (length(value$insights) == 0L) return(NULL)
+      htmltools::tags$section(
+        class = "insight-section",
+        htmltools::tags$div(
+          class = "section-heading",
+          htmltools::tags$div(
+            htmltools::tags$p(class = "eyebrow", "INSIGHTS AUDITÁVEIS"),
+            htmltools::tags$h2("Leituras descritivas do recorte")
+          ),
+          htmltools::tags$p("Regras determinísticas; sem inferência causal.")
+        ),
+        htmltools::tags$div(
+          class = "insight-grid",
+          lapply(value$insights, function(item) {
+            htmltools::tags$article(
+              class = "insight-card",
+              htmltools::tags$h3(item$title),
+              htmltools::tags$p(item$text),
+              htmltools::tags$details(
+                htmltools::tags$summary("Como foi calculado"),
+                htmltools::tags$code(item$formula),
+                htmltools::tags$p(item$caveat)
+              )
+            )
+          })
+        )
+      )
+    })
+
+    output$quality <- shiny::renderUI({
+      value <- require_analysis_value(analysis())
+      quality <- value$quality
+      labels <- c(
+        territorios_validos = "Territórios com medida válida",
+        territorios_zero = "Territórios com zero confirmado",
+        territorios_sem_dado = "Territórios sem dado",
+        territorios_sem_geometria = "Linhas sem geometria",
+        denominadores_ausentes = "Denominadores ausentes",
+        registros_sem_medida = "Registros sem valor da medida",
+        registros_sem_idade = "Registros sem idade válida"
+      )
+      htmltools::tags$details(
+        class = "quality-panel",
+        htmltools::tags$summary("Qualidade e completude"),
+        htmltools::tags$dl(lapply(seq_len(nrow(quality)), function(index) {
+          htmltools::tagList(
+            htmltools::tags$dt(labels[[quality$indicator[[index]]]]),
+            htmltools::tags$dd(format_pt_number(quality$value[[index]]))
+          )
+        }))
       )
     })
   })

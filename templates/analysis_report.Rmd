@@ -1,0 +1,108 @@
+---
+title: "Relatório auditável DATASUS"
+lang: pt-BR
+output:
+  html_document:
+    self_contained: true
+    toc: true
+    theme: cosmo
+params:
+  analysis: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, dpi = 180)
+analysis <- params$analysis
+```
+
+## Recorte
+
+**Tema:** `r analysis$query$domain_label`
+
+**Medida:** `r analysis$query$measure_label`
+
+**Período:** `r paste(analysis$query$periods$id, collapse = ", ")`
+
+**Abrangência:** `r analysis$query$uf %||% "Brasil"`
+
+**Semântica territorial:** `r analysis$geography_semantics`
+**Métrica exibida:** `r analysis$metric_label`
+
+Este relatório é descritivo. Diferenças temporais ou territoriais não demonstram causalidade.
+
+## Indicadores
+
+```{r}
+data.frame(
+  Indicador = c("Total registrado", "Taxa geral", "Maior valor territorial", "Territórios avaliados"),
+  Valor = c(
+    metric_value_text(analysis$summary$total),
+    metric_value_text(analysis$summary$overall_rate, analysis$summary$metric),
+    paste(analysis$summary$top_name, metric_value_text(analysis$summary$top_value, analysis$summary$metric)),
+    analysis$summary$territories_with_data
+  ),
+  check.names = FALSE
+)
+```
+
+## Insights auditáveis
+
+```{r results='asis'}
+if (length(analysis$insights) == 0L) {
+  cat("Nenhum insight comparativo foi aplicável ao recorte.")
+} else {
+  for (item in analysis$insights) {
+    cat("### ", item$title, "\n\n", item$text, "\n\n")
+    cat("**Fórmula:** `", item$formula, "`  \n", item$caveat, "\n\n", sep = "")
+  }
+}
+```
+
+## Série temporal
+
+```{r fig.width=11, fig.height=5.5}
+make_series_plot(analysis)
+```
+
+## Ranking
+
+```{r fig.width=11, fig.height=8}
+make_ranking_plot(analysis)
+```
+
+## Mapa
+
+```{r fig.width=11, fig.height=8}
+if (is.null(analysis$map_sf)) {
+  cat("Geometria indisponível para este recorte.")
+} else {
+  print(make_static_map_plot(analysis))
+}
+```
+
+## Dados territoriais
+
+```{r}
+knitr::kable(export_map_table(analysis), digits = 2)
+```
+
+## Qualidade e completude
+
+```{r}
+knitr::kable(analysis$quality, col.names = c("Indicador", "Valor"))
+```
+
+## Método e proveniência
+
+- Taxas brutas usam pessoas-ano e IC95% exato de Poisson para contagens inteiras.
+- Taxas padronizadas usam padronização direta, população Brasil 2010 e IC95% gama de Fay–Feuer.
+- Zero só é completado depois da confirmação dos arquivos esperados; falhas de aquisição permanecem ausentes.
+- Classificação do mapa: `r analysis$classification$method_label`.
+- Geometria: `r analysis$geometry_year`.
+
+```{r}
+cat("Manifesto de reprodução:\n\n")
+cat("```json\n")
+cat(jsonlite::toJSON(analysis$manifest, pretty = TRUE, auto_unbox = TRUE, null = "null", na = "null"))
+cat("\n```\n")
+```

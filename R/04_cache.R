@@ -65,3 +65,37 @@ clear_app_cache <- function(namespace = NULL) {
   if (length(files) > 0L) unlink(files, recursive = TRUE, force = TRUE)
   invisible(TRUE)
 }
+
+cache_inventory <- function() {
+  root <- cache_directory()
+  if (!dir.exists(root)) {
+    return(tibble::tibble(
+      namespace = character(), files = integer(), bytes = numeric(),
+      latest = as.POSIXct(character())
+    ))
+  }
+  files <- list.files(root, full.names = TRUE, recursive = TRUE, all.files = TRUE)
+  files <- files[file.exists(files) & !dir.exists(files) & basename(files) != ".gitkeep"]
+  if (length(files) == 0L) {
+    return(tibble::tibble(
+      namespace = character(), files = integer(), bytes = numeric(),
+      latest = as.POSIXct(character())
+    ))
+  }
+  relative <- substring(files, nchar(root) + 2L)
+  namespace <- sub("/.*$", "", relative)
+  information <- file.info(files)
+  inventory <- tibble::tibble(
+    namespace = namespace,
+    bytes = as.numeric(information$size),
+    modified = information$mtime
+  )
+  inventory <- dplyr::group_by(inventory, .data$namespace)
+  dplyr::summarise(
+    inventory,
+    files = dplyr::n(),
+    bytes = sum(.data$bytes, na.rm = TRUE),
+    latest = max(.data$modified, na.rm = TRUE),
+    .groups = "drop"
+  )
+}

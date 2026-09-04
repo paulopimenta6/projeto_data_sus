@@ -10,12 +10,43 @@ test_that("invalid denominators remain missing", {
   expect_true(all(is.na(calculate_crude_rate(c(1, 1, NA), c(0, NA, 100)))))
 })
 
+test_that("direct age standardization is strict and returns gamma intervals", {
+  events <- tibble::tibble(age_group = AGE_STANDARD_GROUPS, value = rep(10, 17))
+  population <- tibble::tibble(
+    age_group = AGE_STANDARD_GROUPS,
+    person_years = rep(10000, 17)
+  )
+  standard <- stats::setNames(rep(1000, 17), AGE_STANDARD_GROUPS)
+  result <- direct_age_standardize(events, population, standard)
+  expect_true(result$complete)
+  expect_equal(result$rate, 100)
+  expect_lt(result$lower, result$rate)
+  expect_gt(result$upper, result$rate)
+
+  incomplete <- direct_age_standardize(events[-1L, ], population[-1L, ], standard)
+  expect_false(incomplete$complete)
+  expect_true(is.na(incomplete$rate))
+})
+
+test_that("DATASUS encoded ages use quinquennial groups", {
+  expect_equal(decode_datasus_age(c(3001, 4001, 4080), "datasus_encoded"), c(0L, 1L, 80L))
+  expect_equal(
+    decode_datasus_age(c(10, 11, 42, 1), "sih_unit", c(2, 3, 4, 5)),
+    c(0L, 0L, 42L, 101L)
+  )
+  expect_equal(age_group_quinquennial(c(0, 4, 5, 79, 80)), c("0-4", "0-4", "5-9", "75-79", "80+"))
+})
+
 test_that("non-count measures are not eligible for rates", {
-  expect_true(is_count_measure("Internações"))
-  expect_true(is_count_measure("Qtd.aprovada"))
-  expect_true(is_count_measure("Registros de produção"))
-  expect_false(is_count_measure("Valor total"))
-  expect_false(is_count_measure("Taxa mortalidade"))
+  count <- list(measure_type = "count", rate_eligible = TRUE)
+  amount <- list(measure_type = "amount", rate_eligible = TRUE)
+  currency <- list(measure_type = "currency", rate_eligible = FALSE)
+  expect_true(is_count_measure(count))
+  expect_true(is_count_measure(amount))
+  expect_false(is_count_measure(currency))
+  expect_true(measure_rate_eligible(count))
+  expect_false(measure_rate_eligible(currency))
+  expect_false(is_count_measure("Internações"))
 })
 
 test_that("population source rules use SIDRA estimates and censuses", {

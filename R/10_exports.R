@@ -10,7 +10,11 @@ safe_file_stub <- function(analysis, suffix = NULL) {
 
 export_map_table <- function(analysis) {
   columns <- intersect(
-    c("geo_code", "geo_name", "value", "denominator", "rate", "rate_low", "rate_high"),
+    c(
+      "geo_code", "geo_name", "value", "eligible", "missing", "denominator",
+      "rate", "rate_low", "rate_high", "age_standardized_rate",
+      "age_standardized_low", "age_standardized_high"
+    ),
     names(analysis$map_data)
   )
   result <- analysis$map_data[, columns, drop = FALSE]
@@ -18,17 +22,26 @@ export_map_table <- function(analysis) {
     geo_code = "codigo_territorio",
     geo_name = "territorio",
     value = "total",
+    eligible = "registros_elegiveis",
+    missing = "registros_ignorados",
     denominator = "denominador_pessoas_ano",
     rate = "taxa_100_mil",
     rate_low = "taxa_ic95_inferior",
-    rate_high = "taxa_ic95_superior"
+    rate_high = "taxa_ic95_superior",
+    age_standardized_rate = "taxa_padronizada_idade",
+    age_standardized_low = "taxa_padronizada_ic95_inferior",
+    age_standardized_high = "taxa_padronizada_ic95_superior"
   )[names(result)]
   result
 }
 
 export_series_table <- function(analysis) {
   columns <- intersect(
-    c("label", "year", "value", "denominator", "rate", "rate_low", "rate_high"),
+    c(
+      "label", "year", "value", "eligible", "missing", "denominator", "rate",
+      "rate_low", "rate_high", "age_standardized_rate", "age_standardized_low",
+      "age_standardized_high"
+    ),
     names(analysis$series)
   )
   result <- analysis$series[, columns, drop = FALSE]
@@ -36,23 +49,39 @@ export_series_table <- function(analysis) {
     label = "periodo",
     year = "ano",
     value = "total",
+    eligible = "registros_elegiveis",
+    missing = "registros_ignorados",
     denominator = "populacao",
     rate = "taxa_100_mil",
     rate_low = "taxa_ic95_inferior",
-    rate_high = "taxa_ic95_superior"
+    rate_high = "taxa_ic95_superior",
+    age_standardized_rate = "taxa_padronizada_idade",
+    age_standardized_low = "taxa_padronizada_ic95_inferior",
+    age_standardized_high = "taxa_padronizada_ic95_superior"
   )[names(result)]
   result
 }
 
 export_ranking_table <- function(analysis) {
-  columns <- intersect(c("label", "value", "rate", "rate_low", "rate_high"), names(analysis$ranking))
+  columns <- intersect(
+    c(
+      "label", "value", "eligible", "missing", "rate", "rate_low", "rate_high",
+      "age_standardized_rate", "age_standardized_low", "age_standardized_high"
+    ),
+    names(analysis$ranking)
+  )
   result <- analysis$ranking[, columns, drop = FALSE]
   names(result) <- c(
     label = "categoria",
     value = "total",
+    eligible = "registros_elegiveis",
+    missing = "registros_ignorados",
     rate = "taxa_100_mil",
     rate_low = "taxa_ic95_inferior",
-    rate_high = "taxa_ic95_superior"
+    rate_high = "taxa_ic95_superior",
+    age_standardized_rate = "taxa_padronizada_idade",
+    age_standardized_low = "taxa_padronizada_ic95_inferior",
+    age_standardized_high = "taxa_padronizada_ic95_superior"
   )[names(result)]
   result
 }
@@ -75,7 +104,8 @@ write_facilities_geojson <- function(facilities, path) {
   export_columns <- intersect(
     c(
       "co_cnes", "facility_name", "name_muni", "code_muni",
-      "facility_type_code", "facility_date", geometry_column
+      "facility_type_code", "facility_date", "coordinate_source",
+      "coordinate_precision", "coordinate_quality", geometry_column
     ),
     names(facilities)
   )
@@ -103,7 +133,23 @@ write_manifest_json <- function(analysis, path) {
 }
 
 save_plot_png <- function(plot, path, width = 11, height = 7) {
-  ggplot2::ggsave(path, plot = plot, width = width, height = height, dpi = 180, bg = "white")
+  ggplot2::ggsave(path, plot = plot, width = width, height = height, dpi = 300, bg = "white")
+  invisible(path)
+}
+
+write_analysis_report <- function(analysis, path) {
+  template <- project_path("templates", "analysis_report.Rmd")
+  if (!file.exists(template)) stop("O modelo do relatório HTML não foi encontrado.", call. = FALSE)
+  output <- rmarkdown::render(
+    input = template,
+    output_file = basename(path),
+    output_dir = dirname(path),
+    params = list(analysis = analysis),
+    envir = new.env(parent = globalenv()),
+    quiet = TRUE,
+    clean = TRUE
+  )
+  if (!file.exists(output)) stop("O relatório HTML não foi gerado.", call. = FALSE)
   invisible(path)
 }
 

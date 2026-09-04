@@ -35,12 +35,29 @@ ICD10_CHAPTERS <- data.frame(
 MICRODATA_LOOKUPS <- new.env(parent = emptyenv())
 MICRODATA_DBC_CACHE_MAX_AGE <- 24 * 60 * 60
 
-microdata_measure_table <- function(id, value, column = NA_character_, reducer = "sum") {
+microdata_measure_table <- function(
+  id,
+  value,
+  column = NA_character_,
+  reducer = "sum",
+  measure_type = "count",
+  unit = "registros",
+  multiplier = 100000,
+  rate_eligible = TRUE,
+  standardizable = FALSE,
+  parameter = NA_real_
+) {
   data.frame(
     id = id,
     value = value,
     column = column,
     reducer = reducer,
+    measure_type = measure_type,
+    unit = unit,
+    multiplier = multiplier,
+    rate_eligible = rate_eligible,
+    standardizable = standardizable,
+    parameter = parameter,
     stringsAsFactors = FALSE
   )
 }
@@ -66,6 +83,22 @@ lookup_filter <- function(label, role, column, choice_type, matcher = "exact") {
     matcher = matcher,
     urgent_values = character()
   )
+}
+
+range_filter <- function(label, column, choices) {
+  fixed_filter(label, "condition", column, choices, matcher = "numeric_range")
+}
+
+race_color_choices <- function(include_ignored = FALSE) {
+  result <- data.frame(
+    id = c("Branca", "Preta", "Amarela", "Parda", "Indígena"),
+    value = as.character(1:5),
+    stringsAsFactors = FALSE
+  )
+  if (isTRUE(include_ignored)) {
+    result <- rbind(result, data.frame(id = "Ignorada", value = "9"))
+  }
+  result
 }
 
 microdata_source_spec <- function(domain, dataset) {
@@ -121,12 +154,22 @@ microdata_source_spec <- function(domain, dataset) {
     "sim/obitos" = list(
       start_year = 1996L,
       geo_column = "CODMUNRES",
+      geography_semantics = "Município de residência",
       period_kind = "year",
       period_column = "DTOBITO",
-      measures = microdata_measure_table("Óbitos", "obitos", reducer = "rows"),
+      age_column = "IDADE",
+      age_coding = "datasus_encoded",
+      measures = microdata_measure_table(
+        "Óbitos", "obitos", reducer = "rows", unit = "óbitos", standardizable = TRUE
+      ),
       ranking = list(column = "CAUSABAS", label = "Causa básica CID-10", lookup = "icd"),
       filters = list(
         causa_cid10 = lookup_filter("Capítulo da causa básica (CID-10)", "condition", "CAUSABAS", "icd", "icd"),
+        sexo = fixed_filter(
+          "Sexo", "condition", "SEXO",
+          data.frame(id = c("Masculino", "Feminino"), value = c("1", "2"))
+        ),
+        raca_cor = fixed_filter("Raça/cor", "condition", "RACACOR", race_color_choices()),
         ocupacao = lookup_filter("Ocupação", "condition", "OCUP", "occupation"),
         municipio_residencia = lookup_filter("Município de residência", "territory", "CODMUNRES", "municipality")
       ),
@@ -134,16 +177,35 @@ microdata_source_spec <- function(domain, dataset) {
       max_periods_national = 3L,
       uf_files = TRUE
     ),
+    "sim/obitos_ocorrencia" = {
+      base <- unclass(microdata_source_spec("sim", "obitos"))
+      base$geo_column <- "CODMUNOCOR"
+      base$geography_semantics <- "Município de ocorrência do óbito"
+      base$filters$municipio_residencia <- NULL
+      base$filters$municipio_ocorrencia <- lookup_filter(
+        "Município de ocorrência", "territory", "CODMUNOCOR", "municipality"
+      )
+      base
+    },
     "sih_morbidade/geral_internacao" = list(
       start_year = 2008L,
       geo_column = "MUNIC_MOV",
+      geography_semantics = "Município de internação/processamento",
       period_kind = "year_month",
       period_columns = c("ANO_CMPT", "MES_CMPT"),
+      age_column = "IDADE",
+      age_coding = "sih_unit",
+      age_unit_column = "COD_IDADE",
       measures = microdata_measure_table(
         c("Internações (AIH)", "Óbitos hospitalares", "Dias de permanência", "Valor total (R$)"),
         c("internacoes", "obitos_hospitalares", "dias_permanencia", "valor_total"),
         c(NA, "MORTE", "DIAS_PERM", "VAL_TOT"),
-        c("rows", "sum", "sum", "sum")
+        c("rows", "sum", "sum", "sum"),
+        c("count", "count", "duration", "currency"),
+        c("AIH", "óbitos hospitalares", "dias", "reais"),
+        100000,
+        c(TRUE, TRUE, FALSE, FALSE),
+        c(TRUE, TRUE, FALSE, FALSE)
       ),
       ranking = list(column = "DIAG_PRINC", label = "Diagnóstico principal CID-10", lookup = "icd"),
       filters = list(
@@ -151,6 +213,11 @@ microdata_source_spec <- function(domain, dataset) {
           "Capítulo do diagnóstico principal (CID-10)", "condition", "DIAG_PRINC", "icd", "icd"
         ),
         procedimento_sigtap = lookup_filter("Procedimento realizado", "condition", "PROC_REA", "procedure"),
+        sexo = fixed_filter(
+          "Sexo", "condition", "SEXO",
+          data.frame(id = c("Masculino", "Feminino"), value = c("1", "3"))
+        ),
+        raca_cor = fixed_filter("Raça/cor", "condition", "RACA_COR", race_color_choices()),
         municipio_internacao = lookup_filter("Município da internação", "territory", "MUNIC_MOV", "municipality"),
         carater_atendimento = fixed_filter(
           "Caráter do atendimento", "urgency", "CAR_INT", urgency_choices,
@@ -161,16 +228,35 @@ microdata_source_spec <- function(domain, dataset) {
       max_periods_national = 1L,
       uf_files = TRUE
     ),
+    "sih_morbidade/internacoes_residencia" = {
+      base <- unclass(microdata_source_spec("sih_morbidade", "geral_internacao"))
+      base$geo_column <- "MUNIC_RES"
+      base$geography_semantics <- "Município de residência"
+      base$filters$municipio_internacao <- NULL
+      base$filters$municipio_residencia <- lookup_filter(
+        "Município de residência", "territory", "MUNIC_RES", "municipality"
+      )
+      base
+    },
     "sih_producao/aih_rd_internacao" = list(
       start_year = 2008L,
       geo_column = "MUNIC_MOV",
+      geography_semantics = "Município de internação/processamento",
       period_kind = "year_month",
       period_columns = c("ANO_CMPT", "MES_CMPT"),
+      age_column = "IDADE",
+      age_coding = "sih_unit",
+      age_unit_column = "COD_IDADE",
       measures = microdata_measure_table(
         c("AIH processadas", "Valor total (R$)", "Dias de permanência"),
         c("aih_processadas", "valor_total", "dias_permanencia"),
         c(NA, "VAL_TOT", "DIAS_PERM"),
-        c("rows", "sum", "sum")
+        c("rows", "sum", "sum"),
+        c("count", "currency", "duration"),
+        c("AIH", "reais", "dias"),
+        100000,
+        c(TRUE, FALSE, FALSE),
+        c(TRUE, FALSE, FALSE)
       ),
       ranking = list(column = "PROC_REA", label = "Procedimento realizado", lookup = "procedure"),
       filters = list(
@@ -179,6 +265,11 @@ microdata_source_spec <- function(domain, dataset) {
         diagnostico_cid10 = lookup_filter(
           "Capítulo do diagnóstico principal (CID-10)", "condition", "DIAG_PRINC", "icd", "icd"
         ),
+        sexo = fixed_filter(
+          "Sexo", "condition", "SEXO",
+          data.frame(id = c("Masculino", "Feminino"), value = c("1", "3"))
+        ),
+        raca_cor = fixed_filter("Raça/cor", "condition", "RACA_COR", race_color_choices()),
         municipio_internacao = lookup_filter("Município da internação", "territory", "MUNIC_MOV", "municipality"),
         carater_atendimento = fixed_filter(
           "Caráter do atendimento", "urgency", "CAR_INT", urgency_choices,
@@ -192,6 +283,7 @@ microdata_source_spec <- function(domain, dataset) {
     "sia/atendimento" = list(
       start_year = 2008L,
       geo_column = "PA_UFMUN",
+      geography_semantics = "Município do estabelecimento",
       period_kind = "yyyymm",
       period_column = "PA_CMP",
       measures = microdata_measure_table(
@@ -201,7 +293,12 @@ microdata_source_spec <- function(domain, dataset) {
         ),
         c("quantidade_aprovada", "quantidade_apresentada", "valor_aprovado", "valor_apresentado", "registros"),
         c("PA_QTDAPR", "PA_QTDPRO", "PA_VALAPR", "PA_VALPRO", NA),
-        c("sum", "sum", "sum", "sum", "rows")
+        c("sum", "sum", "sum", "sum", "rows"),
+        c("amount", "amount", "currency", "currency", "count"),
+        c("procedimentos", "procedimentos", "reais", "reais", "registros"),
+        100000,
+        c(TRUE, TRUE, FALSE, FALSE, TRUE),
+        FALSE
       ),
       ranking = list(column = "PA_PROC_ID", label = "Procedimento ambulatorial", lookup = "procedure"),
       filters = list(
@@ -223,10 +320,12 @@ microdata_source_spec <- function(domain, dataset) {
     "cnes/estabelecimentos" = list(
       start_year = 2008L,
       geo_column = "CODUFMUN",
+      geography_semantics = "Município do estabelecimento",
       period_kind = "yyyymm",
       period_column = "COMPETEN",
       measures = microdata_measure_table(
-        "Estabelecimentos cadastrados", "estabelecimentos", "CNES", "distinct"
+        "Estabelecimentos cadastrados", "estabelecimentos", "CNES", "distinct",
+        "stock", "estabelecimentos", 100000, FALSE, FALSE
       ),
       ranking = list(column = "TP_UNID", label = "Tipo de estabelecimento", lookup = "cnes_unit"),
       filters = list(
@@ -250,13 +349,16 @@ microdata_source_spec <- function(domain, dataset) {
     "cnes/leitos_internacao" = list(
       start_year = 2008L,
       geo_column = "CODUFMUN",
+      geography_semantics = "Município do estabelecimento",
       period_kind = "yyyymm",
       period_column = "COMPETEN",
       measures = microdata_measure_table(
         c("Leitos existentes", "Leitos SUS", "Leitos não SUS", "Estabelecimentos com leitos"),
         c("leitos_existentes", "leitos_sus", "leitos_nao_sus", "estabelecimentos_com_leitos"),
         c("QT_EXIST", "QT_SUS", "QT_NSUS", "CNES"),
-        c("sum", "sum", "sum", "distinct")
+        c("sum", "sum", "sum", "distinct"),
+        "stock", c("leitos", "leitos", "leitos", "estabelecimentos"),
+        100000, FALSE, FALSE
       ),
       ranking = list(column = "CODLEITO", label = "Tipo de leito", lookup = "raw"),
       filters = list(
@@ -273,6 +375,79 @@ microdata_source_spec <- function(domain, dataset) {
     "sinan/zika" = list(),
     "sinan/malaria" = list(),
     "sinan/leptospirose" = list(),
+    "sinan/chagas" = list(),
+    "sinan/leishmaniose_tegumentar" = list(),
+    "sinan/leishmaniose_visceral" = list(),
+    "sinasc/nascidos_vivos" = list(
+      start_year = 1994L,
+      geo_column = "CODMUNRES",
+      geography_semantics = "Município de residência da mãe",
+      period_kind = "year",
+      period_column = "DTNASC",
+      measures = microdata_measure_table(
+        c(
+          "Nascidos vivos", "Baixo peso ao nascer", "Prematuridade",
+          "Partos cesáreos", "Anomalia congênita registrada"
+        ),
+        c("nascidos_vivos", "baixo_peso", "prematuridade", "cesarea", "anomalia"),
+        c(NA, "PESO", "SEMAGESTAC", "PARTO", "IDANOMAL"),
+        c("rows", "share_lt", "share_lt", "share_equals", "share_equals"),
+        c("count", rep("proportion", 4)),
+        c("nascidos vivos", rep("%", 4)),
+        c(1000, rep(1, 4)),
+        c(TRUE, rep(FALSE, 4)),
+        FALSE,
+        c(NA, 2500, 37, 2, 1)
+      ),
+      ranking = list(column = "PARTO", label = "Tipo de parto", lookup = "birth_delivery"),
+      filters = list(
+        municipio_residencia = lookup_filter(
+          "Município de residência da mãe", "territory", "CODMUNRES", "municipality"
+        ),
+        idade_materna = range_filter(
+          "Faixa etária materna", "IDADEMAE",
+          data.frame(
+            id = c("10 a 19 anos", "20 a 34 anos", "35 anos ou mais"),
+            value = c("10-19", "20-34", "35+")
+          )
+        ),
+        semanas_gestacao = range_filter(
+          "Semanas de gestação", "SEMAGESTAC",
+          data.frame(
+            id = c("Menos de 22", "22 a 36", "37 a 41", "42 ou mais"),
+            value = c("0-21", "22-36", "37-41", "42+")
+          )
+        ),
+        sexo = fixed_filter(
+          "Sexo do recém-nascido", "condition", "SEXO",
+          data.frame(id = c("Masculino", "Feminino"), value = c("1", "2"))
+        ),
+        raca_cor = fixed_filter(
+          "Raça/cor do recém-nascido", "condition", "RACACOR",
+          data.frame(
+            id = c("Branca", "Preta", "Amarela", "Parda", "Indígena"),
+            value = as.character(1:5)
+          )
+        ),
+        tipo_parto = fixed_filter(
+          "Tipo de parto", "condition", "PARTO",
+          data.frame(id = c("Vaginal", "Cesáreo"), value = c("1", "2"))
+        )
+      ),
+      max_periods_uf = 10L,
+      max_periods_national = 3L,
+      uf_files = TRUE
+    ),
+    "sinasc/nascidos_vivos_ocorrencia" = {
+      base <- unclass(microdata_source_spec("sinasc", "nascidos_vivos"))
+      base$geo_column <- "CODMUNNASC"
+      base$geography_semantics <- "Município de ocorrência do nascimento"
+      base$filters$municipio_residencia <- NULL
+      base$filters$municipio_ocorrencia <- lookup_filter(
+        "Município de ocorrência", "territory", "CODMUNNASC", "municipality"
+      )
+      base
+    },
     NULL
   )
 
@@ -283,9 +458,15 @@ microdata_source_spec <- function(domain, dataset) {
     spec <- list(
       start_year = 2007L,
       geo_column = "ID_MN_RESI",
+      geography_semantics = "Município de residência",
       period_kind = "year_column",
       period_column = "NU_ANO",
-      measures = microdata_measure_table("Notificações", "notificacoes", reducer = "rows"),
+      age_column = "NU_IDADE_N",
+      age_coding = "datasus_encoded",
+      measures = microdata_measure_table(
+        "Notificações", "notificacoes", reducer = "rows", unit = "notificações",
+        standardizable = TRUE
+      ),
       ranking = list(column = "CLASSI_FIN", label = "Classificação final", lookup = "fixed"),
       filters = list(
         classificacao_final = fixed_filter(
@@ -295,6 +476,13 @@ microdata_source_spec <- function(domain, dataset) {
           "Critério de confirmação", "condition", "CRITERIO", criterion_choices
         ),
         evolucao = fixed_filter("Evolução", "condition", "EVOLUCAO", evolution_choices),
+        sexo = fixed_filter(
+          "Sexo", "condition", "CS_SEXO",
+          data.frame(id = c("Masculino", "Feminino"), value = c("M", "F"))
+        ),
+        raca_cor = fixed_filter(
+          "Raça/cor", "condition", "CS_RACA", race_color_choices(include_ignored = TRUE)
+        ),
         ocupacao = lookup_filter("Ocupação", "condition", "ID_OCUPA_N", "occupation"),
         municipio_residencia = lookup_filter(
           "Município de residência", "territory", "ID_MN_RESI", "municipality"
@@ -310,7 +498,7 @@ microdata_source_spec <- function(domain, dataset) {
     }
   }
 
-  spec <- c(source_config, spec)
+  spec <- utils::modifyList(spec, source_config)
   spec$frequency <- get_domain_config(domain)$frequency
   class(spec) <- c("microdata_source_spec", "list")
   spec
@@ -527,7 +715,9 @@ microdata_required_columns <- function(spec) {
     spec$ranking$column,
     period_columns,
     measure_columns,
-    filter_columns
+    filter_columns,
+    spec$age_column %||% character(),
+    spec$age_unit_column %||% character()
   ))
 }
 
@@ -549,6 +739,14 @@ microdata_query_columns <- function(spec, query = NULL) {
     )]
     active_filters <- unique(c(active_filters, urgency))
   }
+  age_column <- if (identical(query$scale, "age_standardized_rate")) {
+    c(
+      spec$age_column %||% character(),
+      spec$age_unit_column %||% character()
+    )
+  } else {
+    character()
+  }
   unknown_filters <- setdiff(active_filters, names(spec$filters))
   if (length(unknown_filters) > 0L) {
     stop("Filtro sem adaptador de microdados: ", unknown_filters[[1L]], ".", call. = FALSE)
@@ -563,7 +761,8 @@ microdata_query_columns <- function(spec, query = NULL) {
     spec$ranking$column,
     spec$period_columns %||% spec$period_column,
     stats::na.omit(measure$column),
-    filter_columns
+    filter_columns,
+    age_column
   ))
 }
 
@@ -915,6 +1114,23 @@ match_cnes_groups <- function(codes, groups) {
   normalize_microdata_code(codes) %in% accepted
 }
 
+match_numeric_ranges <- function(values, ranges) {
+  values <- suppressWarnings(as.numeric(as.character(values)))
+  matched <- rep(FALSE, length(values))
+  for (range in ranges) {
+    if (endsWith(range, "+")) {
+      lower <- suppressWarnings(as.numeric(sub("[+]$", "", range)))
+      matched <- matched | (!is.na(values) & values >= lower)
+    } else {
+      limits <- suppressWarnings(as.numeric(strsplit(range, "-", fixed = TRUE)[[1L]]))
+      if (length(limits) == 2L && all(is.finite(limits))) {
+        matched <- matched | (!is.na(values) & values >= limits[[1L]] & values <= limits[[2L]])
+      }
+    }
+  }
+  matched
+}
+
 apply_microdata_filters <- function(data, query, spec) {
   filters <- query$filters
   if (isTRUE(query$urgent_only)) {
@@ -939,6 +1155,7 @@ apply_microdata_filters <- function(data, query, spec) {
       exact = normalize_microdata_code(data[[definition$column]]) %in% normalize_microdata_code(values),
       icd = match_icd_ranges(data[[definition$column]], values),
       cnes_group = match_cnes_groups(data[[definition$column]], values),
+      numeric_range = match_numeric_ranges(data[[definition$column]], values),
       stop("Método de filtro de microdados desconhecido.", call. = FALSE)
     )
     data <- data[!is.na(keep) & keep, , drop = FALSE]
@@ -1073,6 +1290,7 @@ microdata_geography_universe <- function(query, refresh = FALSE) {
 
 complete_microdata_dimensions <- function(bundle, query, refresh = FALSE) {
   universe <- microdata_geography_universe(query, refresh)
+  missing_value <- if (identical(bundle$measure$measure_type[[1L]], "proportion")) NA_real_ else 0
   missing_labels <- setdiff(universe$label, bundle$map$label)
   if (length(missing_labels) > 0L) {
     source_line <- if (nrow(bundle$map) > 0L) bundle$map$source_line[[1L]] else "Território"
@@ -1081,7 +1299,7 @@ complete_microdata_dimensions <- function(bundle, query, refresh = FALSE) {
       tibble::tibble(
         dimension = "geography",
         label = missing_labels,
-        value = 0,
+        value = missing_value,
         is_total = FALSE,
         source_line = source_line
       )
@@ -1090,7 +1308,7 @@ complete_microdata_dimensions <- function(bundle, query, refresh = FALSE) {
 
   expected_labels <- unique(as.character(query$periods$id))
   observed <- match(expected_labels, bundle$series$label)
-  period_values <- rep(0, length(expected_labels))
+  period_values <- rep(missing_value, length(expected_labels))
   period_values[!is.na(observed)] <- bundle$series$value[observed[!is.na(observed)]]
   completed_series <- tibble::tibble(
     dimension = "period",
@@ -1112,6 +1330,11 @@ microdata_lookup_labels <- function(codes, lookup, definition = NULL) {
     procedure = microdata_procedure_lookup(),
     occupation = microdata_occupation_lookup(),
     cnes_unit = microdata_cnes_unit_lookup(),
+    birth_delivery = data.frame(
+      code = c("1", "2", "9"),
+      label = c("Vaginal", "Cesáreo", "Ignorado"),
+      stringsAsFactors = FALSE
+    ),
     NULL
   )
   if (!is.null(table)) {
@@ -1144,20 +1367,53 @@ microdata_measure_spec <- function(spec, value) {
   measure
 }
 
-reduce_microdata_measure <- function(data, measure) {
-  if (measure$reducer == "rows") return(as.numeric(nrow(data)))
+reduce_measure_details <- function(data, measure) {
+  if (measure$reducer == "rows") {
+    return(list(
+      value = as.numeric(nrow(data)), numerator = NA_real_,
+      eligible = as.numeric(nrow(data)), missing = 0
+    ))
+  }
   column <- measure$column[[1L]]
   if (!column %in% names(data)) stop("A medida exige a coluna ausente ", column, ".", call. = FALSE)
   values <- data[[column]]
   if (measure$reducer == "distinct") {
     values <- normalize_microdata_code(values)
-    values <- values[!is.na(values) & nzchar(values)]
-    return(as.numeric(length(unique(values))))
+    known <- !is.na(values) & nzchar(values)
+    return(list(
+      value = as.numeric(length(unique(values[known]))), numerator = NA_real_,
+      eligible = sum(known), missing = sum(!known)
+    ))
   }
-  values <- suppressWarnings(as.numeric(as.character(values)))
-  if (length(values) == 0L) return(0)
-  if (all(is.na(values))) return(NA_real_)
-  sum(values, na.rm = TRUE)
+  if (measure$reducer %in% c("share_lt", "share_equals")) {
+    numeric_values <- suppressWarnings(as.numeric(as.character(values)))
+    known <- is.finite(numeric_values)
+    if (measure$reducer == "share_equals") {
+      known <- known & numeric_values %in% c(1, 2)
+      numerator <- sum(known & numeric_values == measure$parameter[[1L]])
+    } else {
+      numerator <- sum(known & numeric_values < measure$parameter[[1L]])
+    }
+    eligible <- sum(known)
+    return(list(
+      value = if (eligible == 0L) NA_real_ else numerator / eligible * 100,
+      numerator = as.numeric(numerator), eligible = as.numeric(eligible),
+      missing = as.numeric(length(values) - eligible)
+    ))
+  }
+  numeric_values <- suppressWarnings(as.numeric(as.character(values)))
+  if (length(numeric_values) == 0L) {
+    return(list(value = 0, numerator = NA_real_, eligible = 0, missing = 0))
+  }
+  known <- is.finite(numeric_values)
+  list(
+    value = if (any(known)) sum(numeric_values[known]) else NA_real_,
+    numerator = NA_real_, eligible = sum(known), missing = sum(!known)
+  )
+}
+
+reduce_microdata_measure <- function(data, measure) {
+  reduce_measure_details(data, measure)$value
 }
 
 aggregate_microdata_dimension <- function(data, labels, measure, dimension, source_line) {
@@ -1167,38 +1423,104 @@ aggregate_microdata_dimension <- function(data, labels, measure, dimension, sour
   if (nrow(data) == 0L) {
     return(tibble::tibble(
       dimension = character(), label = character(), value = numeric(),
-      is_total = logical(), source_line = character()
+      numerator = numeric(), eligible = numeric(), missing = numeric(),
+      measure_type = character(), is_total = logical(), source_line = character()
     ))
   }
-  frame <- tibble::tibble(label = labels)
-  if (measure$reducer == "rows") {
-    result <- dplyr::count(frame, .data$label, name = "value")
-    result$value <- as.numeric(result$value)
-  } else {
-    column <- measure$column[[1L]]
-    if (!column %in% names(data)) stop("A medida exige a coluna ausente ", column, ".", call. = FALSE)
-    if (measure$reducer == "distinct") {
-      frame$measure_value <- normalize_microdata_code(data[[column]])
-      frame <- dplyr::group_by(frame, .data$label)
-      result <- dplyr::summarise(
-        frame,
-        value = dplyr::n_distinct(.data$measure_value[!is.na(.data$measure_value) & nzchar(.data$measure_value)]),
-        .groups = "drop"
-      )
-    } else {
-      frame$measure_value <- suppressWarnings(as.numeric(as.character(data[[column]])))
-      frame <- dplyr::group_by(frame, .data$label)
-      result <- dplyr::summarise(
-        frame,
-        value = if (all(is.na(.data$measure_value))) NA_real_ else sum(.data$measure_value, na.rm = TRUE),
-        .groups = "drop"
-      )
-    }
-  }
+  groups <- split(seq_len(nrow(data)), labels)
+  result <- dplyr::bind_rows(lapply(names(groups), function(label) {
+    details <- reduce_measure_details(data[groups[[label]], , drop = FALSE], measure)
+    tibble::tibble(
+      label = label,
+      value = details$value,
+      numerator = details$numerator,
+      eligible = details$eligible,
+      missing = details$missing
+    )
+  }))
   result$dimension <- dimension
+  result$measure_type <- measure$measure_type[[1L]]
   result$is_total <- FALSE
   result$source_line <- source_line
-  dplyr::select(result, "dimension", "label", "value", "is_total", "source_line")
+  dplyr::select(
+    result, "dimension", "label", "value", "numerator", "eligible", "missing",
+    "measure_type", "is_total", "source_line"
+  )
+}
+
+decode_datasus_age <- function(x, coding = "years", unit = NULL) {
+  values <- suppressWarnings(as.integer(as.character(x)))
+  if (coding == "years") return(ifelse(values >= 0L & values <= 130L, values, NA_integer_))
+  if (coding == "sih_unit") {
+    units <- suppressWarnings(as.integer(as.character(unit)))
+    if (length(units) != length(values)) return(rep(NA_integer_, length(values)))
+    result <- rep(NA_integer_, length(values))
+    result[units %in% c(2L, 3L)] <- 0L
+    result[units == 4L] <- values[units == 4L]
+    result[units == 5L] <- 100L + values[units == 5L]
+    result[result < 0L | result > 130L] <- NA_integer_
+    return(result)
+  }
+  text <- as.character(values)
+  unit <- suppressWarnings(as.integer(substr(text, 1L, 1L)))
+  amount <- suppressWarnings(as.integer(substr(text, 2L, nchar(text))))
+  result <- rep(NA_integer_, length(values))
+  result[unit %in% 1:3] <- 0L
+  result[unit == 4L] <- amount[unit == 4L]
+  result[unit == 5L] <- 100L + amount[unit == 5L]
+  result[result < 0L | result > 130L] <- NA_integer_
+  result
+}
+
+decode_source_age <- function(data, spec) {
+  unit <- if (!is.null(spec$age_unit_column) && spec$age_unit_column %in% names(data)) {
+    data[[spec$age_unit_column]]
+  } else {
+    NULL
+  }
+  decode_datasus_age(
+    data[[spec$age_column]],
+    spec$age_coding %||% "years",
+    unit = unit
+  )
+}
+
+age_group_quinquennial <- function(age) {
+  breaks <- c(seq(0, 80, by = 5), Inf)
+  labels <- c(paste(seq(0, 75, by = 5), seq(4, 79, by = 5), sep = "-"), "80+")
+  as.character(cut(age, breaks = breaks, labels = labels, right = FALSE))
+}
+
+aggregate_microdata_age <- function(data, geography_labels, measure, spec) {
+  if (is.null(spec$age_column) || !spec$age_column %in% names(data)) return(NULL)
+  age <- decode_source_age(data, spec)
+  age_group <- age_group_quinquennial(age)
+  combined <- paste(geography_labels, age_group, sep = "\r")
+  valid <- !is.na(geography_labels) & !is.na(age_group)
+  if (!any(valid)) return(NULL)
+  result <- aggregate_microdata_dimension(
+    data[valid, , drop = FALSE], combined[valid], measure, "age", "Faixa etária"
+  )
+  pieces <- strsplit(result$label, "\r", fixed = TRUE)
+  result$label <- vapply(pieces, `[[`, character(1), 1L)
+  result$age_group <- vapply(pieces, `[[`, character(1), 2L)
+  result
+}
+
+aggregate_microdata_age_series <- function(data, period_labels, measure, spec) {
+  if (is.null(spec$age_column) || !spec$age_column %in% names(data)) return(NULL)
+  age <- decode_source_age(data, spec)
+  age_group <- age_group_quinquennial(age)
+  combined <- paste(period_labels, age_group, sep = "\r")
+  valid <- !is.na(period_labels) & !is.na(age_group)
+  if (!any(valid)) return(NULL)
+  result <- aggregate_microdata_dimension(
+    data[valid, , drop = FALSE], combined[valid], measure, "age_period", "Faixa etária"
+  )
+  pieces <- strsplit(result$label, "\r", fixed = TRUE)
+  result$label <- vapply(pieces, `[[`, character(1), 1L)
+  result$age_group <- vapply(pieces, `[[`, character(1), 2L)
+  result
 }
 
 aggregate_microdata_bundle <- function(
@@ -1229,6 +1551,16 @@ aggregate_microdata_bundle <- function(
   map <- aggregate_microdata_dimension(
     map_source, geography_labels, measure, "geography", pretty_filter_name(spec$geo_column)
   )
+  age_events <- if (isTRUE(measure$standardizable[[1L]])) {
+    aggregate_microdata_age(map_source, geography_labels, measure, spec)
+  } else {
+    NULL
+  }
+  age_missing_records <- if (!is.null(spec$age_column) && spec$age_column %in% names(map_source)) {
+    sum(is.na(decode_source_age(map_source, spec)))
+  } else {
+    NA_real_
+  }
 
   matching_filters <- names(spec$filters)[
     vapply(spec$filters, function(item) identical(item$column, spec$ranking$column), logical(1))
@@ -1239,13 +1571,19 @@ aggregate_microdata_bundle <- function(
     NULL
   }
   fixed_choices <- if (!is.null(ranking_definition)) ranking_definition$choices %||% NULL else NULL
-  ranking_labels <- microdata_lookup_labels(
-    map_source[[spec$ranking$column]], spec$ranking$lookup, fixed_choices
-  )
-  ranking <- aggregate_microdata_dimension(
-    map_source, ranking_labels, measure, "ranking", spec$ranking$label
-  )
-  ranking_kind <- "condition"
+  if (identical(measure$measure_type[[1L]], "proportion")) {
+    ranking <- map
+    ranking$dimension <- "ranking"
+    ranking_kind <- "territory"
+  } else {
+    ranking_labels <- microdata_lookup_labels(
+      map_source[[spec$ranking$column]], spec$ranking$lookup, fixed_choices
+    )
+    ranking <- aggregate_microdata_dimension(
+      map_source, ranking_labels, measure, "ranking", spec$ranking$label
+    )
+    ranking_kind <- "condition"
+  }
   warnings <- if (invalid_geographies > 0L) {
     paste0(invalid_geographies, " registro(s) ficaram sem território identificável no mapa.")
   } else {
@@ -1260,6 +1598,11 @@ aggregate_microdata_bundle <- function(
 
   period_labels <- parts$label[match(period_key, parts$key)]
   series <- aggregate_microdata_dimension(data, period_labels, measure, "period", "Período")
+  age_series <- if (isTRUE(measure$standardizable[[1L]])) {
+    aggregate_microdata_age_series(data, period_labels, measure, spec)
+  } else {
+    NULL
+  }
   if (query$frequency == "snapshot" && nrow(query$periods) > 1L) {
     warnings <- c(
       warnings,
@@ -1267,12 +1610,22 @@ aggregate_microdata_bundle <- function(
     )
   }
 
+  total_details <- reduce_measure_details(map_source, measure)
   bundle <- list(
     map = map,
-    total = reduce_microdata_measure(map_source, measure),
+    total = total_details$value,
     ranking = ranking,
     ranking_kind = ranking_kind,
     series = series,
+    age_events = age_events,
+    age_series = age_series,
+    measure = as.list(measure[1L, , drop = FALSE]),
+    quality = list(
+      numerator_records = total_details$numerator,
+      eligible_records = total_details$eligible,
+      missing_measure_records = total_details$missing,
+      missing_age_records = age_missing_records
+    ),
     map_periods = map_periods,
     warnings = unique(warnings),
     provenance = list(),
@@ -1287,19 +1640,40 @@ aggregate_microdata_bundle <- function(
 combine_microdata_dimension <- function(tables) {
   data <- dplyr::bind_rows(tables)
   if (nrow(data) == 0L) return(data)
-  data <- dplyr::group_by(data, .data$dimension, .data$label, .data$is_total, .data$source_line)
+  grouping <- c("dimension", "label", "measure_type", "is_total", "source_line")
+  if ("age_group" %in% names(data)) grouping <- c(grouping, "age_group")
+  data <- dplyr::group_by(data, dplyr::across(dplyr::all_of(grouping)))
   dplyr::summarise(
     data,
-    value = if (any(is.na(.data$value))) NA_real_ else sum(.data$value),
+    numerator = sum_or_na(.data$numerator),
+    eligible = sum_or_na(.data$eligible),
+    missing = sum(.data$missing, na.rm = TRUE),
+    value = if (dplyr::first(.data$measure_type) == "proportion") {
+      if (is.na(.data$eligible[[1L]]) || .data$eligible[[1L]] <= 0) NA_real_ else
+        .data$numerator[[1L]] / .data$eligible[[1L]] * 100
+    } else if (any(is.na(.data$value))) {
+      NA_real_
+    } else {
+      sum(.data$value)
+    },
     .groups = "drop"
   )
 }
 
 combine_microdata_bundles <- function(bundles) {
   totals <- vapply(bundles, `[[`, numeric(1), "total")
+  measure_type <- bundles[[1L]]$measure$measure_type[[1L]]
+  eligible <- sum(vapply(bundles, function(item) item$quality$eligible_records, numeric(1)))
+  numerator <- sum(vapply(bundles, function(item) item$quality$numerator_records, numeric(1)), na.rm = TRUE)
   list(
     map = combine_microdata_dimension(lapply(bundles, `[[`, "map")),
-    total = if (any(is.na(totals))) NA_real_ else sum(totals),
+    total = if (measure_type == "proportion") {
+      if (eligible <= 0) NA_real_ else numerator / eligible * 100
+    } else if (any(is.na(totals))) {
+      NA_real_
+    } else {
+      sum(totals)
+    },
     ranking = combine_microdata_dimension(lapply(bundles, `[[`, "ranking")),
     ranking_kind = if (all(vapply(bundles, `[[`, character(1), "ranking_kind") == "condition")) {
       "condition"
@@ -1307,6 +1681,19 @@ combine_microdata_bundles <- function(bundles) {
       "territory"
     },
     series = combine_microdata_dimension(lapply(bundles, `[[`, "series")),
+    age_events = combine_microdata_dimension(lapply(bundles, `[[`, "age_events")),
+    age_series = combine_microdata_dimension(lapply(bundles, `[[`, "age_series")),
+    measure = bundles[[1L]]$measure,
+    quality = list(
+      numerator_records = numerator,
+      eligible_records = eligible,
+      missing_measure_records = sum(vapply(
+        bundles, function(item) item$quality$missing_measure_records, numeric(1)
+      )),
+      missing_age_records = sum(vapply(
+        bundles, function(item) item$quality$missing_age_records, numeric(1)
+      ), na.rm = TRUE)
+    ),
     map_periods = bundles[[1L]]$map_periods,
     warnings = unique(unlist(lapply(bundles, `[[`, "warnings"), use.names = FALSE)),
     provenance = list(),
@@ -1324,7 +1711,15 @@ run_microdata_bundle_uncached <- function(query, refresh = FALSE) {
 
   for (index in seq_along(ufs)) {
     uf <- if (is.na(ufs[[index]])) NULL else ufs[[index]]
+    if (!is.null(shiny::getDefaultReactiveDomain())) {
+      shiny::incProgress(
+        0.45 / length(ufs),
+        detail = paste0("Arquivo ", index, "/", length(ufs), " · ", uf %||% "Brasil")
+      )
+    }
+    started_at <- Sys.time()
     fetched <- fetch_microdata_slice(spec, parts, uf, refresh, query)
+    elapsed_seconds <- as.numeric(difftime(Sys.time(), started_at, units = "secs"))
     bundles[[index]] <- aggregate_microdata_bundle(
       fetched$data, query, spec, refresh, complete_dimensions = FALSE
     )
@@ -1336,6 +1731,8 @@ run_microdata_bundle_uncached <- function(query, refresh = FALSE) {
       urls = paste(stats::na.omit(fetched$source_manifest$url), collapse = ", "),
       releases = paste(stats::na.omit(fetched$source_manifest$release), collapse = ", "),
       sha256 = paste(stats::na.omit(fetched$source_manifest$sha256), collapse = ", "),
+      elapsed_seconds = elapsed_seconds,
+      status = "complete",
       stringsAsFactors = FALSE
     )
     fetch_warnings <- c(fetch_warnings, fetched$warnings)
@@ -1365,7 +1762,7 @@ run_microdata_bundle_uncached <- function(query, refresh = FALSE) {
 microdata_cache_key <- function(query) {
   list(
     provider = "microdata",
-    schema_version = 2L,
+    schema_version = CACHE_SCHEMA_VERSION,
     application_version = APP_VERSION,
     datasusr_version = safe_package_version("datasusr"),
     microdatasus_version = safe_package_version("microdatasus"),
@@ -1399,4 +1796,46 @@ run_microdata_bundle <- function(query, refresh = FALSE) {
     ))
   }
   execution
+}
+
+resolve_data_provider <- function(domain, dataset) {
+  if (!is_microdata_dataset(domain, dataset)) {
+    stop(
+      "O conjunto selecionado não possui adaptador DBC auditado: ", domain, "/", dataset, ".",
+      call. = FALSE
+    )
+  }
+  "microdata"
+}
+
+fetch_datasus_options <- function(domain, dataset, uf = NULL, geo_level = "state", refresh = FALSE) {
+  resolve_data_provider(domain, dataset)
+  fetch_microdata_options(domain, dataset, uf, geo_level, refresh)
+}
+
+source_filter_choices <- function(options, domain, dataset, field, uf = NULL) {
+  if (is.null(field) || !nzchar(field)) return(NULL)
+  definition <- microdata_source_spec(domain, dataset)$filters[[field]]
+  if (is.null(definition)) {
+    stop("Filtro sem adaptador de microdados: ", field, ".", call. = FALSE)
+  }
+  if (identical(uf, "all") || identical(uf, "")) uf <- NULL
+  microdata_filter_choices(definition, uf)
+}
+
+resolve_urgency_filter <- function(options) {
+  filter_index <- classify_source_filters(options)
+  urgency <- filter_index[filter_index$role == "urgency", , drop = FALSE]
+  if (nrow(urgency) == 0L) return(NULL)
+  field <- urgency$field[[1L]]
+  selected <- resolve_option(options$filtros[[field]], c("Urgência", "Urgente", "Emergência"))
+  if (is.null(selected)) return(NULL)
+  list(field = field, value = selected$value[[1L]])
+}
+
+run_datasus_bundle <- function(query, refresh = FALSE) {
+  if (!identical(query$provider, "microdata")) {
+    stop("Somente adaptadores DBC auditados são aceitos no runtime.", call. = FALSE)
+  }
+  run_microdata_bundle(query, refresh)
 }

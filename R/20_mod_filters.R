@@ -27,6 +27,13 @@ mod_filters_ui <- function(id) {
       htmltools::tags$h2("Defina o recorte"),
       htmltools::tags$p("Os campos são definidos por adaptadores auditáveis dos arquivos públicos do DATASUS.")
     ),
+    shiny::radioButtons(
+      ns("interface_mode"),
+      "Nível de configuração",
+      choices = c("Simples" = "simple", "Avançado" = "advanced"),
+      selected = "simple",
+      inline = TRUE
+    ),
     shiny::selectInput(ns("domain"), "Tema", choices = domain_choices(), selected = "sih_morbidade"),
     shiny::uiOutput(ns("dataset_ui")),
     shiny::selectInput(ns("uf"), "Abrangência", choices = uf_choices(), selected = "all"),
@@ -88,6 +95,52 @@ mod_filters_ui <- function(id) {
     ),
     shiny::uiOutput(ns("urgency_ui")),
     shiny::uiOutput(ns("scale_ui")),
+    shiny::conditionalPanel(
+      condition = "input.interface_mode === 'advanced'",
+      shiny::selectInput(
+        ns("comparison"),
+        "Referência comparativa",
+        choices = c(
+          "Automática (UF ou Brasil)" = "auto",
+          "Sem comparação" = "none"
+        ),
+        selected = "auto"
+      ),
+      shiny::selectInput(
+        ns("map_method"),
+        "Classificação do mapa",
+        choices = c(
+          "Quantis" = "quantile", "Intervalos iguais" = "equal",
+          "Logarítmica" = "log", "Limites fixos" = "fixed"
+        ),
+        selected = "quantile"
+      ),
+      shiny::conditionalPanel(
+        condition = "input.map_method === 'fixed'",
+        shiny::textInput(
+          ns("map_fixed_breaks"),
+          "Limites separados por vírgula",
+          placeholder = "0, 10, 25, 50, 100"
+        ),
+        ns = ns
+      ),
+      shiny::selectInput(
+        ns("top_n"), "Itens no ranking",
+        choices = c("Top 10" = "10", "Top 15" = "15", "Top 25" = "25"),
+        selected = "15"
+      ),
+      htmltools::tags$div(
+        class = "cache-controls",
+        shiny::uiOutput(ns("cache_status")),
+        shiny::actionButton(
+          ns("clear_aggregate_cache"),
+          "Limpar resultados agregados",
+          class = "btn-source",
+          width = "100%"
+        )
+      ),
+      ns = ns
+    ),
     shiny::actionButton(
       ns("analyze"),
       "Analisar",
@@ -104,6 +157,25 @@ mod_filters_ui <- function(id) {
 mod_filters_server <- function(id) {
   shiny::moduleServer(id, function(input, output, session) {
     catalog <- load_datasus_catalog()
+
+    cache_generation <- shiny::reactiveVal(0L)
+    output$cache_status <- shiny::renderUI({
+      cache_generation()
+      inventory <- cache_inventory()
+      total <- sum(inventory$bytes, na.rm = TRUE)
+      htmltools::tags$p(
+        class = "source-status",
+        paste0("Cache local: ", format_pt_number(total / 1024^2, 0.1), " MB")
+      )
+    })
+    shiny::observeEvent(input$clear_aggregate_cache, {
+      clear_app_cache("microdata-results")
+      cache_generation(cache_generation() + 1L)
+      shiny::showNotification(
+        "Resultados agregados removidos; arquivos DBC verificados foram preservados.",
+        type = "message"
+      )
+    })
 
     output$dataset_ui <- shiny::renderUI({
       choices <- dataset_choices(input$domain, catalog)
@@ -152,7 +224,8 @@ mod_filters_server <- function(id) {
         paste0(
           nrow(value$periodo), " períodos, ", nrow(value$conteudo),
           " medidas e ", length(value$filtros), " filtros disponíveis · ",
-          value$provider_label %||% "DATASUS"
+          value$provider_label %||% "DATASUS",
+          " · disponibilidade confirmada no início da análise"
         )
       )
     })
@@ -261,11 +334,16 @@ mod_filters_server <- function(id) {
     output$scale_ui <- shiny::renderUI({
       value <- valid_metadata()
       measure <- value$conteudo[value$conteudo$value %in% input$measure, , drop = FALSE]
-      measure_label <- if (nrow(measure) == 1L) measure$id[[1L]] else ""
-      choices <- if (is_count_measure(measure_label)) {
-        c("Total" = "count", "Taxa por 100 mil" = "rate")
-      } else {
-        c("Total" = "count")
+      choices <- c("Valor observado" = "count")
+      if (nrow(measure) == 1L && measure_rate_eligible(measure)) {
+        multiplier <- format_pt_number(measure$multiplier[[1L]], accuracy = 1)
+        choices <- c(choices, stats::setNames("rate", paste("Taxa bruta por", multiplier)))
+      }
+      if (nrow(measure) == 1L && isTRUE(measure$standardizable[[1L]])) {
+        choices <- c(
+          choices,
+          "Taxa padronizada por idade (denominadores 2010)" = "age_standardized_rate"
+        )
       }
       shiny::radioButtons(
         session$ns("scale"),
@@ -289,6 +367,10 @@ mod_filters_server <- function(id) {
       periods <- value$periodo[value$periodo$value %in% input$periods, , drop = FALSE]
       shiny::validate(shiny::need(nrow(measure) == 1L, "Selecione uma medida válida."))
       shiny::validate(shiny::need(nrow(periods) > 0L, "Selecione períodos válidos."))
+      fixed_breaks <- suppressWarnings(as.numeric(trimws(strsplit(
+        input$map_fixed_breaks %||% "", ",", fixed = TRUE
+      )[[1L]])))
+      fixed_breaks <- fixed_breaks[is.finite(fixed_breaks)]
 
       new_datasus_query(
         domain = input$domain,
@@ -303,7 +385,12 @@ mod_filters_server <- function(id) {
         territory_field = input$territory_field,
         territory_values = input$territory_values %||% character(),
         urgent_only = isTRUE(input$urgent_only),
-        scale = input$scale %||% "count"
+        scale = input$scale %||% "count",
+        comparison = input$comparison %||% "auto",
+        map_method = input$map_method %||% "quantile",
+        map_fixed_breaks = fixed_breaks,
+        top_n = input$top_n %||% "15",
+        interface_mode = input$interface_mode %||% "simple"
       )
     })
 

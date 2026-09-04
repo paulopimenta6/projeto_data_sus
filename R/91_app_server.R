@@ -38,6 +38,37 @@ app_server <- function(input, output, session) {
     )
   })
 
+  output$analysis_state <- shiny::renderUI({
+    value <- analysis()
+    if (is.null(value)) {
+      return(htmltools::tags$section(
+        class = "central-state central-state-idle",
+        htmltools::tags$p(class = "eyebrow", "PRONTO PARA ANALISAR"),
+        htmltools::tags$h2("Configure o recorte uma única vez"),
+        htmltools::tags$p(
+          "Carregue as opções da fonte, escolha a medida e o período e clique em Analisar. ",
+          "Gráficos, mapas, qualidade e exportações usarão o mesmo contrato."
+        )
+      ))
+    }
+    if (inherits(value, "datasus_analysis_error")) {
+      return(htmltools::tags$section(
+        class = "central-state central-state-error",
+        htmltools::tags$p(class = "eyebrow", "CONSULTA NÃO CONCLUÍDA"),
+        htmltools::tags$h2("Nenhum resultado parcial foi publicado"),
+        htmltools::tags$p(value$message),
+        htmltools::tags$p("Revise o recorte ou tente novamente quando a fonte estiver disponível.")
+      ))
+    }
+    NULL
+  })
+
+  output$analysis_ready <- shiny::renderText({
+    value <- analysis()
+    if (!is.null(value) && !inherits(value, "datasus_analysis_error")) "true" else "false"
+  })
+  shiny::outputOptions(output, "analysis_ready", suspendWhenHidden = FALSE)
+
   mod_summary_server("summary", analysis)
   mod_charts_server("charts", analysis)
   facilities <- mod_maps_server("maps", analysis)

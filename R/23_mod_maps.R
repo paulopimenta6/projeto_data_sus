@@ -6,7 +6,10 @@ mod_maps_ui <- function(id) {
       "Mapa coroplético",
       htmltools::tags$div(
         class = "map-toolbar",
-        htmltools::tags$p("Clique em um território para consultar o valor e a métrica aplicada."),
+        htmltools::tags$p(
+          "Clique em um território para ver valor, denominador, incerteza e contexto. ",
+          "Zero e ausência de dado usam cores distintas."
+        ),
         shiny::uiOutput(ns("map_note"))
       ),
       leaflet::leafletOutput(ns("choropleth"), height = "680px")
@@ -20,6 +23,11 @@ mod_maps_ui <- function(id) {
           "Tipo de estabelecimento",
           choices = facility_type_choices(),
           selected = "hospital"
+        ),
+        shiny::textInput(
+          ns("facility_search"),
+          "Buscar por nome ou município",
+          placeholder = "Ex.: hospital regional"
         ),
         shiny::actionButton(ns("load_facilities"), "Carregar pontos", class = "btn-source"),
         shiny::uiOutput(ns("facility_status"))
@@ -49,7 +57,10 @@ mod_maps_server <- function(id, analysis) {
       value <- require_analysis_value(analysis())
       htmltools::tags$span(
         class = "source-chip",
-        paste("Limites territoriais:", value$geometry_year)
+        paste0(
+          "Limites: ", value$geometry_year, " · ", value$classification$method_label,
+          " · ", value$classification$missing_count, " sem dado"
+        )
       )
     })
 
@@ -101,6 +112,13 @@ mod_maps_server <- function(id, analysis) {
     output$facility_map <- leaflet::renderLeaflet({
       value <- facilities()
       shiny::validate(shiny::need(!is.null(value), "Os pontos ainda não foram carregados."))
+      search <- normalize_text(input$facility_search %||% "")
+      if (nzchar(search)) {
+        municipality <- if ("name_muni" %in% names(value)) value$name_muni else ""
+        searchable <- normalize_text(paste(value$facility_name, municipality))
+        value <- value[grepl(search, searchable, fixed = TRUE), , drop = FALSE]
+      }
+      shiny::validate(shiny::need(nrow(value) > 0L, "Nenhum estabelecimento corresponde à busca."))
       build_facility_map(value)
     })
 

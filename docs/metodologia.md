@@ -2,6 +2,9 @@
 
 Esta página explica como o painel transforma uma escolha feita na tela em um resultado. Os detalhes ajudam a interpretar os números, mas não são necessários para começar a usar o sistema.
 
+Para aprender primeiro pelos botões e por um exemplo, use o
+[Guia de primeiros passos](guia-do-usuario.md).
+
 ## O que o painel consulta
 
 O painel usa os arquivos DBC públicos do DATASUS. Um registro local define, para cada conjunto, quais colunas representam período, território, medida, condição e ranking. Assim, a interface não depende da estrutura variável de formulários web.
@@ -30,6 +33,7 @@ Total é a soma da medida escolhida no período e no recorte selecionados. O sig
 - no SIH, pode ser número de internações ou AIH;
 - no SIA, pode ser quantidade aprovada;
 - no SINAN, pode ser número de notificações;
+- no SINASC, pode ser número de nascidos vivos ou proporção entre registros elegíveis;
 - no CNES, pode ser número de estabelecimentos ou recursos cadastrados.
 
 Cada sistema possui uma redução explícita. SIH e SIM contam registros quando a medida é uma ocorrência; SIA soma quantidades ou valores aprovados/apresentados; CNES conta estabelecimentos distintos ou soma leitos. O total é calculado diretamente sobre o recorte filtrado, sem somar linhas de subtotal.
@@ -38,10 +42,11 @@ Cada sistema possui uma redução explícita. SIH e SIM contam registros quando 
 
 O mapa usa uma coluna territorial fixa e documentada por adaptador:
 
-- SIM e SINAN usam município de residência;
-- SIH usa município de processamento/internação (`MUNIC_MOV`);
+- SIM pode usar residência ou ocorrência; SINAN usa residência;
+- SIH pode usar residência ou processamento/internação (`MUNIC_MOV`);
 - SIA usa município do estabelecimento (`PA_UFMUN`);
 - CNES usa município do estabelecimento (`CODUFMUN`).
+- SINASC pode usar residência da mãe ou ocorrência do nascimento.
 
 Essas escolhas evitam misturar residência com local de atendimento. Para SIH e SIA, uma UF selecionada representa os arquivos processados naquela UF; isso não equivale a medir todos os residentes da UF quando existe atendimento interestadual.
 
@@ -72,6 +77,25 @@ Na série mensal, cada ponto usa `1/12` da população anual. Isso transforma o 
 Quando o numerador é uma contagem inteira, o painel calcula um intervalo exato de Poisson de 95%.
 
 O intervalo mostra a incerteza estatística em torno da taxa. Intervalos largos são comuns quando há poucos eventos e devem levar a uma interpretação mais cautelosa.
+
+## Padronização direta por idade
+
+Medidas elegíveis podem usar faixas `0–4`, `5–9`, até `75–79` e `80+`, com a
+população brasileira do Censo 2010 como padrão. O IC95% segue o método gama de
+Fay–Feuer. A taxa não é calculada se idade, numerador ou denominador estiver incompleto;
+ela também não corrige sub-registro, acesso ou qualidade do preenchimento.
+
+No SIH, `IDADE` é interpretada em conjunto com `COD_IDADE`: dias e meses entram em
+`0–4`, anos são usados diretamente e o código de centena representa `100 + idade`.
+Atualmente, os denominadores municipais por faixa etária estão configurados somente
+para 2010. Em outros anos, o painel informa a limitação e volta à taxa bruta quando ela
+estiver disponível, sem reutilizar silenciosamente a população etária de 2010.
+
+## Comparações e insights
+
+Municípios e regiões são comparados com o total compatível da UF; consultas nacionais
+usam o Brasil. As regras mostram mudança frente ao período anterior, razão frente à
+referência e concentração territorial, sempre com fórmula e ressalva descritiva.
 
 ## Como os territórios são ligados ao mapa
 

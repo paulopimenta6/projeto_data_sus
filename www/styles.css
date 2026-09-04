@@ -177,6 +177,25 @@ body {
   gap: 1.25rem;
 }
 
+.central-state {
+  max-width: 60rem;
+  margin: 0 auto 1rem;
+  padding: clamp(1.2rem, 4vw, 2.5rem);
+  border: 1px solid #cfe1de;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0.7rem 2rem rgba(11, 45, 58, 0.06);
+}
+
+.central-state h2 {
+  color: var(--sus-navy);
+}
+
+.central-state-error {
+  border-left: 0.4rem solid #e76f51;
+  background: #fff7f4;
+}
+
 .analysis-heading,
 .section-heading {
   display: flex;
@@ -269,6 +288,53 @@ body {
   font-size: 0.88rem;
 }
 
+.insight-section,
+.quality-panel,
+.chart-data-table {
+  padding: 1rem 1.2rem;
+  border: 1px solid #dfe9e7;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.insight-card {
+  padding: 1rem;
+  border-left: 0.3rem solid var(--sus-teal);
+  border-radius: 0.7rem;
+  background: #f3f9f8;
+}
+
+.insight-card h3 {
+  color: var(--sus-navy);
+  font-size: 1rem;
+}
+
+.quality-panel summary,
+.chart-data-table summary {
+  color: var(--sus-navy);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.quality-panel dl {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  gap: 0.4rem 1rem;
+  margin: 1rem 0 0;
+}
+
+.quality-panel dd {
+  margin: 0;
+  font-weight: 750;
+}
+
 .alert-warning {
   color: #6b4a07;
   background: #fff7df;
@@ -325,6 +391,10 @@ body {
 .leaflet-container {
   border-radius: 0.85rem;
   background: #e8f0ef;
+}
+
+.map-popup span {
+  color: #536a72;
 }
 
 .data-card,
@@ -411,6 +481,18 @@ body {
 
   .source-chip {
     width: fit-content;
+  }
+
+  .leaflet-container {
+    max-height: 68vh;
+  }
+
+  .quality-panel dl {
+    grid-template-columns: 1fr;
+  }
+
+  .quality-panel dd {
+    margin-bottom: 0.5rem;
   }
 }
 

@@ -52,6 +52,15 @@ DOMAIN_CONFIG <- list(
     default_dataset = "dengue",
     frequency = "annual",
     ranking_terms = c("classificacao final", "criterio confirmacao", "evolucao", "faixa etaria")
+  ),
+  sinasc = list(
+    label = "Nascidos vivos (SINASC)",
+    system = "sinasc",
+    provider = "microdata",
+    source_function = "sinasc",
+    default_dataset = "nascidos_vivos",
+    frequency = "annual",
+    ranking_terms = c("tipo de parto", "idade materna", "peso ao nascer", "gestacao")
   )
 )
 
@@ -61,10 +70,20 @@ MICRODATA_DATASET_CONFIG <- list(
     source = "SIM", file_type = "DO", information_system = "SIM-DO",
     category = "mortalidade", description = "Óbitos por residência"
   ),
+  "sim/obitos_ocorrencia" = list(
+    domain = "sim", system = "sim", dataset = "obitos_ocorrencia",
+    source = "SIM", file_type = "DO", information_system = "SIM-DO",
+    category = "mortalidade", description = "Óbitos por ocorrência"
+  ),
   "sih_morbidade/geral_internacao" = list(
     domain = "sih_morbidade", system = "sih", dataset = "geral_internacao",
     source = "SIHSUS", file_type = "RD", information_system = "SIH-RD",
     category = "morbidade hospitalar", description = "Morbidade hospitalar geral"
+  ),
+  "sih_morbidade/internacoes_residencia" = list(
+    domain = "sih_morbidade", system = "sih", dataset = "internacoes_residencia",
+    source = "SIHSUS", file_type = "RD", information_system = "SIH-RD",
+    category = "morbidade hospitalar", description = "Internações por residência"
   ),
   "sih_producao/aih_rd_internacao" = list(
     domain = "sih_producao", system = "sih", dataset = "aih_rd_internacao",
@@ -110,6 +129,31 @@ MICRODATA_DATASET_CONFIG <- list(
     domain = "sinan", system = "sinan", dataset = "leptospirose",
     source = "SINAN", file_type = "LEPT", information_system = "SINAN-LEPTOSPIROSE",
     category = "agravos de notificação", description = "Leptospirose"
+  ),
+  "sinan/chagas" = list(
+    domain = "sinan", system = "sinan", dataset = "chagas",
+    source = "SINAN", file_type = "CHAG", information_system = "SINAN-CHAGAS",
+    category = "agravos de notificação", description = "Doença de Chagas"
+  ),
+  "sinan/leishmaniose_tegumentar" = list(
+    domain = "sinan", system = "sinan", dataset = "leishmaniose_tegumentar",
+    source = "SINAN", file_type = "LTAN", information_system = "SINAN-LEISHMANIOSE-TEGUMENTAR",
+    category = "agravos de notificação", description = "Leishmaniose tegumentar"
+  ),
+  "sinan/leishmaniose_visceral" = list(
+    domain = "sinan", system = "sinan", dataset = "leishmaniose_visceral",
+    source = "SINAN", file_type = "LEIV", information_system = "SINAN-LEISHMANIOSE-VISCERAL",
+    category = "agravos de notificação", description = "Leishmaniose visceral"
+  ),
+  "sinasc/nascidos_vivos" = list(
+    domain = "sinasc", system = "sinasc", dataset = "nascidos_vivos",
+    source = "SINASC", file_type = "DN", information_system = "SINASC",
+    category = "nascimentos", description = "Declarações de nascidos vivos"
+  ),
+  "sinasc/nascidos_vivos_ocorrencia" = list(
+    domain = "sinasc", system = "sinasc", dataset = "nascidos_vivos_ocorrencia",
+    source = "SINASC", file_type = "DN", information_system = "SINASC",
+    category = "nascimentos", description = "Nascidos vivos por ocorrência"
   )
 )
 
@@ -152,17 +196,18 @@ fallback_catalog <- function() {
   data.frame(
     sistema = c(
       "sim", "sih", "sih", "sia", "cnes", "cnes", "sinan", "sinan",
-      "sinan", "sinan", "sinan"
+      "sinan", "sinan", "sinan", "sinan", "sinan", "sinan", "sinasc"
     ),
     conjunto = c(
       "obitos", "geral_internacao", "aih_rd_internacao", "atendimento",
       "estabelecimentos", "leitos_internacao", "dengue", "chikungunya",
-      "zika", "malaria", "leptospirose"
+      "zika", "malaria", "leptospirose", "chagas", "leishmaniose_tegumentar",
+      "leishmaniose_visceral", "nascidos_vivos"
     ),
     categoria = c(
       "mortalidade", "morbidade hospitalar", "produção hospitalar",
       "produção ambulatorial", "estabelecimentos", "recursos físicos",
-      rep("agravos de notificação", 5)
+      rep("agravos de notificação", 8), "nascimentos"
     ),
     descricao = c(
       "Óbitos por residência ou ocorrência",
@@ -171,7 +216,9 @@ fallback_catalog <- function() {
       "Produção ambulatorial",
       "Estabelecimentos de saúde",
       "Leitos de internação",
-      "Dengue", "Chikungunya", "Zika", "Malária", "Leptospirose"
+      "Dengue", "Chikungunya", "Zika", "Malária", "Leptospirose",
+      "Doença de Chagas", "Leishmaniose tegumentar", "Leishmaniose visceral",
+      "Declarações de nascidos vivos"
     ),
     escopo = "all",
     stringsAsFactors = FALSE

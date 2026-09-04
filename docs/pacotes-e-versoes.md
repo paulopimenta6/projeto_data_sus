@@ -15,34 +15,32 @@ O `prepare_environment.R` lê esses arquivos, instala bibliotecas do Ubuntu/Debi
 
 | Pacote | Versão registrada | Publicação verificada | Função no projeto |
 |---|---:|---:|---|
-| `datasus` | 0.16.1 | 05/08/2026 | Compatibilidade legada e normalização de códigos territoriais |
 | `datasusr` | 0.1.0 | 04/05/2026 | Catálogo, download com cache e leitura principal dos arquivos DBC |
-| `microdatasus` | 3.0.0 | 29/07/2026 | Download de contingência e dicionários de municípios, SIGTAP e CBO |
+| `microdatasus` | 3.0.0 | 29/07/2026 | Contingência, processamento e dicionários de SIM, SIH, SIA, CNES, SINAN e SINASC |
 | `geobr` | 2.0.1 | 23/06/2026 | Limites territoriais e estabelecimentos |
 | `sidrar` | 0.5.0 | 26/08/2026 | População municipal do IBGE/SIDRA |
 | `leaflet` | 2.2.3 | - | Mapas interativos |
 | `renv` | 1.2.4 | - | Biblioteca isolada e reprodução de versões |
-| `pak` | 0.11.1 | - | Descoberta de bibliotecas do sistema |
+| `pak` | 0.9.5 | - | Descoberta de bibliotecas do sistema |
 
 O `renv.lock` é a fonte definitiva caso a tabela acima fique desatualizada.
 
-## Por que o pacote datasus vem do GitHub
+## Por que o pacote `datasus` foi removido
 
-A versão antiga `datasus` 0.4.1.1 foi removida do CRAN em 2020. O projeto usa `rpradosiqueira/datasus` na tag `v0.16.1`, fixada no commit:
-
-```text
-eec28e81ef833d344b3c6a170de7456945e87360
-```
-
-Fixar o commit impede que uma mudança futura no repositório altere silenciosamente o comportamento da aplicação. A versão 0.16.1 foi confirmada como a versão estável mais recente do repositório em 31 de agosto de 2026.
+Até a versão 0.2, o pacote permanecia instalado para uma normalização territorial e
+para um caminho TABNET que a interface não utilizava. A versão 0.3 removeu ambos. Códigos
+DATASUS de seis dígitos são ligados a uma correspondência oficial IBGE obtida por `geobr`
+e versionada no cache; o painel não calcula localmente o dígito verificador.
 
 ## Qual caminho de dados o painel usa
 
-A interface usa um registro explícito de fontes para SIM-DO, SIH-RD, SIA-PA, CNES-ST/LT e agravos selecionados do SINAN. As opções da tela são locais e não dependem da leitura de formulários web.
+A interface usa um registro explícito de fontes e medidas para SIM-DO, SINASC-DN,
+SIH-RD, SIA-PA, CNES-ST/LT e agravos selecionados do SINAN. Cada medida declara tipo,
+unidade, redutor, multiplicador e elegibilidade para taxas e padronização.
 
 Na análise, `datasusr` lista, baixa para `data/cache/dbc/` e lê somente as colunas necessárias. Se essa rota falhar, o mesmo recorte é tentado com `microdatasus`. Os registros são filtrados e agregados em memória; apenas os agregados alimentam mapas, gráficos e exportações. Consultas nacionais são processadas por UF e possuem limites menores de período para controlar memória, rede e tempo de execução.
 
-O código de TABNET permanece isolado como compatibilidade legada, mas nenhum conjunto oferecido pela interface depende dele. Denominadores populacionais também são obtidos pelo SIDRA, sem consulta TABNET.
+Não existe caminho TABNET no runtime. Denominadores populacionais são obtidos pelo SIDRA.
 
 ## Compatibilidade do R
 
@@ -68,7 +66,7 @@ Verificação atualizada em 31 de agosto de 2026.
 | Referência | Situação observada |
 |---|---|
 | `datasus` no RDocumentation | Versão 0.4.1.1, publicada em 2019; o pacote saiu do CRAN em 2020 |
-| `rpradosiqueira/datasus` | Versão estável `v0.16.1`, usada pelo projeto |
+| `rpradosiqueira/datasus` | Avaliado historicamente; removido do runtime na versão 0.3 |
 | `datasusr` | Versão CRAN 0.1.0 para catálogo, download, cache e leitura DBC |
 | `microdatasus` | Versão CRAN 3.0.0; suporta SIM, SINASC, SIH, SIA, CNES e parte do SINAN |
 | Guia RPubs do `microdatasus` | Material introdutório; confirme argumentos na documentação atual do pacote |

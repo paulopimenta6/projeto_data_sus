@@ -9,7 +9,9 @@ mod_data_exports_ui <- function(id) {
           htmltools::tags$p(class = "eyebrow", "DADOS ANALÍTICOS"),
           htmltools::tags$h2("Tabela territorial")
         ),
-        htmltools::tags$p("A tabela exibe o total e, quando disponível, denominador e taxa bruta.")
+        htmltools::tags$p(
+          "A tabela distingue total, campos ignorados, denominador, taxa bruta e taxa padronizada."
+        )
       ),
       DT::DTOutput(ns("table"))
     ),
@@ -32,6 +34,7 @@ mod_data_exports_ui <- function(id) {
         shiny::downloadButton(ns("ranking_png"), "Ranking · PNG"),
         shiny::downloadButton(ns("map_png"), "Mapa · PNG"),
         shiny::downloadButton(ns("map_html"), "Mapa · HTML"),
+        shiny::downloadButton(ns("report_html"), "Relatório completo · HTML"),
         shiny::downloadButton(ns("facilities_geojson"), "Estabelecimentos · GeoJSON"),
         shiny::downloadButton(ns("manifest"), "Manifesto · JSON")
       )
@@ -88,6 +91,10 @@ mod_data_exports_server <- function(id, analysis, facilities) {
     output$map_html <- shiny::downloadHandler(
       filename = function() paste0(safe_file_stub(require_analysis_value(analysis()), "mapa_interativo"), ".html"),
       content = function(file) save_interactive_map(build_choropleth_map(require_analysis_value(analysis())), file)
+    )
+    output$report_html <- shiny::downloadHandler(
+      filename = function() paste0(safe_file_stub(require_analysis_value(analysis()), "relatorio"), ".html"),
+      content = function(file) write_analysis_report(require_analysis_value(analysis()), file)
     )
     output$facilities_geojson <- shiny::downloadHandler(
       filename = function() paste0(safe_file_stub(require_analysis_value(analysis()), "estabelecimentos"), ".geojson"),

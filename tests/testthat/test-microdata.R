@@ -86,6 +86,9 @@ test_that("DBC readers receive only columns required by the query", {
     c("MUNIC_MOV", "DIAG_PRINC", "ANO_CMPT", "MES_CMPT", "PROC_REA", "CAR_INT")
   )
   expect_false("VAL_TOT" %in% microdata_query_columns(spec, query))
+
+  query$scale <- "age_standardized_rate"
+  expect_true(all(c("IDADE", "COD_IDADE") %in% microdata_query_columns(spec, query)))
 })
 
 test_that("national municipality filters process only selected states", {
@@ -213,6 +216,59 @@ test_that("SINAN national files can be restricted by residence UF", {
   bundle <- aggregate_microdata_bundle(data, query)
   expect_equal(bundle$total, sum(substr(data$ID_MN_RESI, 1L, 2L) == uf_code("RO")))
   expect_equal(sum(bundle$map$value), bundle$total)
+})
+
+test_that("SINASC proportions retain numerator, eligible records, and missingness", {
+  data <- standardize_microdata_columns(load_microdata_sample("sinasc_sample"))
+  query <- new_microdata_sample_query(
+    "sinasc",
+    "nascidos_vivos",
+    data.frame(id = "2016", value = "2016"),
+    "baixo_peso"
+  )
+  bundle <- aggregate_microdata_bundle(data, query)
+  known <- is.finite(suppressWarnings(as.numeric(data$PESO)))
+  expected <- sum(known & as.numeric(data$PESO) < 2500) / sum(known) * 100
+
+  expect_equal(bundle$total, expected)
+  expect_equal(bundle$quality$eligible_records, sum(known))
+  expect_equal(bundle$quality$missing_measure_records, sum(!known))
+  expect_equal(bundle$ranking_kind, "territory")
+  expect_true(any(is.na(bundle$map$value)))
+})
+
+test_that("source registry declares measure semantics instead of reading labels", {
+  sih <- microdata_source_spec("sih_morbidade", "geral_internacao")
+  expect_true(all(c(
+    "measure_type", "unit", "multiplier", "rate_eligible", "standardizable"
+  ) %in% names(sih$measures)))
+  expect_true(sih$measures$standardizable[sih$measures$value == "internacoes"])
+  expect_false(sih$measures$rate_eligible[sih$measures$value == "valor_total"])
+  expect_equal(sih$geography_semantics, "Município de internação/processamento")
+})
+
+test_that("expanded epidemiological sources are registered", {
+  catalog <- load_datasus_catalog()
+  expect_true(all(c(
+    "chagas", "leishmaniose_tegumentar", "leishmaniose_visceral", "nascidos_vivos"
+  ) %in% catalog$conjunto))
+  expect_equal(microdata_source_spec("sinasc", "nascidos_vivos")$information_system, "SINASC")
+})
+
+test_that("geographic variants retain the source contract without duplicated fields", {
+  sim <- microdata_source_spec("sim", "obitos_ocorrencia")
+  sih <- microdata_source_spec("sih_morbidade", "internacoes_residencia")
+  sinasc <- microdata_source_spec("sinasc", "nascidos_vivos_ocorrencia")
+
+  expect_equal(sim$geo_column, "CODMUNOCOR")
+  expect_equal(sim$geography_semantics, "Município de ocorrência do óbito")
+  expect_equal(sih$geo_column, "MUNIC_RES")
+  expect_equal(sih$geography_semantics, "Município de residência")
+  expect_equal(sinasc$geo_column, "CODMUNNASC")
+  expect_equal(sinasc$geography_semantics, "Município de ocorrência do nascimento")
+  expect_true(all(vapply(list(sim, sih, sinasc), function(spec) {
+    !anyDuplicated(names(spec))
+  }, logical(1))))
 })
 
 test_that("source schemas omit fields unavailable in a specific disease", {

@@ -45,11 +45,8 @@ test_that("project metadata drives dependency and version checks", {
   imports <- setup_environment$description_imports(description)
 
   expect_equal(setup_environment$find_project_root(testthat::test_path()), project)
-  expect_true(all(c("datasus", "pak", "shiny") %in% imports))
-  expect_equal(
-    setup_environment$description_remote("datasus", description),
-    "rpradosiqueira/datasus@v0.16.1"
-  )
+  expect_true(all(c("datasusr", "microdatasus", "pak", "shiny") %in% imports))
+  expect_false("datasus" %in% imports)
   expect_equal(as.character(setup_environment$minimum_r_version(description)), "4.1.0")
   expect_equal(setup_environment$lockfile_r_version(lockfile), "4.6.1")
 })

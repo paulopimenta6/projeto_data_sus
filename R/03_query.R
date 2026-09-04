@@ -11,7 +11,12 @@ new_datasus_query <- function(
   territory_field = NULL,
   territory_values = character(),
   urgent_only = FALSE,
-  scale = "count"
+  scale = "count",
+  comparison = "auto",
+  map_method = "quantile",
+  map_fixed_breaks = numeric(),
+  top_n = 15L,
+  interface_mode = "simple"
 ) {
   config <- get_domain_config(domain)
   if (identical(uf, "all") || identical(uf, "")) uf <- NULL
@@ -31,18 +36,36 @@ new_datasus_query <- function(
   append_filter(condition_field, condition_values)
   append_filter(territory_field, territory_values)
 
+  measure_spec <- list(
+    id = as.character(measure$id[[1L]]),
+    value = as.character(measure$value[[1L]]),
+    measure_type = as.character(measure$measure_type[[1L]] %||% "unknown"),
+    unit = as.character(measure$unit[[1L]] %||% "registros"),
+    multiplier = as.numeric(measure$multiplier[[1L]] %||% 100000),
+    rate_eligible = isTRUE(measure$rate_eligible[[1L]] %||% FALSE),
+    standardizable = isTRUE(measure$standardizable[[1L]] %||% FALSE)
+  )
+  requested_scale <- match.arg(scale, c("count", "rate", "age_standardized_rate"))
+  if (requested_scale == "rate" && !measure_spec$rate_eligible) {
+    stop("A medida selecionada não aceita denominador populacional.", call. = FALSE)
+  }
+  if (requested_scale == "age_standardized_rate" && !measure_spec$standardizable) {
+    stop("A medida selecionada não permite padronização direta por idade.", call. = FALSE)
+  }
+
   query <- list(
     domain = domain,
     domain_label = config$label,
     system = config$system,
-    provider = attr(options, "provider") %||% config$provider %||% "tabnet",
+    provider = attr(options, "provider") %||% config$provider %||% "microdata",
     source_function = config$source_function,
     frequency = config$frequency,
     dataset = as.character(dataset),
     uf = if (is.null(uf)) NULL else toupper(as.character(uf)),
     geo_level = match.arg(geo_level, c("state", "municipality", "health_region")),
-    measure_label = as.character(measure$id[[1L]]),
-    measure_value = as.character(measure$value[[1L]]),
+    measure_label = measure_spec$id,
+    measure_value = measure_spec$value,
+    measure_spec = measure_spec,
     periods = data.frame(
       id = as.character(periods$id),
       value = as.character(periods$value),
@@ -50,7 +73,12 @@ new_datasus_query <- function(
     ),
     filters = filters,
     urgent_only = isTRUE(urgent_only),
-    scale = match.arg(scale, c("count", "rate")),
+    scale = requested_scale,
+    comparison = match.arg(comparison, c("auto", "none", "state", "brazil")),
+    map_method = match.arg(map_method, c("quantile", "equal", "log", "fixed")),
+    map_fixed_breaks = sort(unique(as.numeric(map_fixed_breaks[is.finite(map_fixed_breaks)]))),
+    top_n = match.arg(as.character(top_n), c("10", "15", "25")),
+    interface_mode = match.arg(interface_mode, c("simple", "advanced")),
     options = options,
     created_at = Sys.time()
   )
@@ -86,6 +114,9 @@ validate_datasus_query <- function(query) {
       " período(s) por consulta de microdados.",
       call. = FALSE
     )
+  }
+  if (query$map_method == "fixed" && length(query$map_fixed_breaks) < 2L) {
+    stop("Informe ao menos dois limites numéricos para a classificação fixa.", call. = FALSE)
   }
   invisible(query)
 }
@@ -219,18 +250,29 @@ query_to_manifest <- function(query) {
     uf = query$uf %||% "Brasil",
     geo_level = query$geo_level,
     measure = list(label = query$measure_label, value = query$measure_value),
+    measure_spec = query$measure_spec,
     periods = unname(split(query$periods, seq_len(nrow(query$periods)))),
     filters = query$filters,
     urgent_only = query$urgent_only,
     scale = query$scale,
+    comparison = query$comparison,
+    map = list(
+      method = query$map_method,
+      fixed_breaks = query$map_fixed_breaks
+    ),
+    top_n = as.integer(query$top_n),
+    interface_mode = query$interface_mode,
     created_at = format(query$created_at, "%Y-%m-%dT%H:%M:%S%z")
   )
 }
 
-is_count_measure <- function(label) {
-  normalized <- normalize_text(label)
-  grepl(
-    "obit|intern|aih|caso|notific|quant|qtd|estabelec|leito|atendimento|proced|registro",
-    normalized
-  ) && !grepl("valor|custo|media|taxa|percent|propor", normalized)
+is_count_measure <- function(measure) {
+  if (!is.data.frame(measure) && !is.list(measure)) return(FALSE)
+  type <- measure$measure_type %||% "unknown"
+  isTRUE(as.character(type[[1L]]) %in% c("count", "amount"))
+}
+
+measure_rate_eligible <- function(measure) {
+  if (!is.data.frame(measure) && !is.list(measure)) return(FALSE)
+  isTRUE(measure$rate_eligible[[1L]] %||% FALSE)
 }

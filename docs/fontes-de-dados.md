@@ -2,6 +2,9 @@
 
 Você não precisa decorar as siglas para usar o painel. Esta página explica, em linguagem direta, o que cada fonte representa e qual cuidado deve ser tomado.
 
+Se esta é sua primeira visita, faça antes o
+[roteiro guiado de 10 minutos](guia-do-usuario.md#roteiro-guiado-de-10-minutos).
+
 ## Visão rápida
 
 | Sigla | Nome | O que um registro representa | Principal cuidado |
@@ -11,12 +14,15 @@ Você não precisa decorar as siglas para usar o painel. Esta página explica, e
 | SIA | Sistema de Informações Ambulatoriais | Produção ambulatorial apresentada ou aprovada | Quantidade de procedimentos não é quantidade de pessoas |
 | SINAN | Sistema de Informação de Agravos de Notificação | Uma notificação ou investigação | Cada doença possui regras próprias |
 | CNES | Cadastro Nacional de Estabelecimentos de Saúde | Um estabelecimento ou recurso cadastrado em um mês | É cadastro de estrutura, não atendimento realizado |
+| SINASC | Sistema de Informações sobre Nascidos Vivos | Uma declaração de nascido vivo | Campos ignorados alteram o denominador de proporções |
 
 ## SIM: mortalidade
 
 O SIM reúne informações das declarações de óbito. Ele permite analisar causas CID-10, ano, residência e local de ocorrência.
 
-Use **residência** para estudar onde viviam as pessoas. Use **ocorrência** para estudar onde os óbitos aconteceram. Os dois recortes respondem a perguntas diferentes; nesta versão, o mapa do painel usa residência.
+Use **residência** para estudar onde viviam as pessoas. Use **ocorrência** para estudar
+onde os óbitos aconteceram. Os dois recortes respondem a perguntas diferentes e estão
+disponíveis como conjuntos separados no painel.
 
 Os dados costumam ser anuais e podem ser revisados.
 
@@ -48,6 +54,13 @@ O CNES descreve hospitais, unidades básicas, profissionais, leitos, equipamento
 Cada competência funciona como uma fotografia daquele mês. Somar janeiro e fevereiro contaria novamente muitos dos mesmos estabelecimentos. Por isso, quando vários meses são escolhidos, o mapa usa a competência mais recente.
 
 O mapa de pontos usa dados georreferenciados do `geobr`, derivados do CNES. Alguns registros podem ficar fora do mapa por coordenada ausente ou inválida.
+
+## SINASC: nascidos vivos
+
+O SINASC permite analisar nascidos vivos por residência da mãe ou ocorrência,
+baixo peso, prematuridade, tipo de parto e anomalia registrada. Proporções usam como
+denominador apenas os registros com resposta conhecida e apresentam separadamente a
+quantidade ignorada. A taxa de nascidos vivos usa multiplicador de mil habitantes.
 
 ## População para calcular taxas
 

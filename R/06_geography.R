@@ -1,4 +1,4 @@
-GEOMETRY_YEARS <- list(
+GEOMETRY_YEAR_FALLBACK <- list(
   state = c(1872, 1900, 1911, 1920, 1933, 1940, 1950, 1960, 1970, 1980, 1991, 2000, 2001, 2010, 2013:2025),
   municipality = c(
     1872, 1900, 1911, 1920, 1933, 1940, 1950, 1960, 1970,
@@ -7,12 +7,12 @@ GEOMETRY_YEARS <- list(
   health_region = c(1991, 1994, 1997, 2001, 2005, 2013, 2023, 2024, 2025)
 )
 
-FACILITY_DATES <- c(
+FACILITY_DATE_FALLBACK <- c(
   201704, 201707, 201710,
   as.vector(outer(2018:2025, c(1, 4, 7, 10), function(year, month) year * 100 + month)),
   202601, 202604
 )
-FACILITY_DATES <- sort(unique(as.integer(FACILITY_DATES)))
+FACILITY_DATE_FALLBACK <- sort(unique(as.integer(FACILITY_DATE_FALLBACK)))
 
 FACILITY_TYPE_CODES <- list(
   all = character(),
@@ -55,13 +55,48 @@ normalize_municipality_code <- function(code) {
   result[seven] <- code[seven]
   six <- !is.na(code) & nchar(code) == 6L
   if (any(six)) {
-    normalized <- tryCatch(
-      datasus::normalizar_codigo_ibge(code[six], desconhecido = "na"),
-      error = function(error) rep(NA_character_, sum(six))
-    )
-    result[six] <- format_integer_code(normalized, width = 7L)
+    crosswalk <- municipality_code_crosswalk()
+    result[six] <- crosswalk$code7[match(code[six], crosswalk$code6)]
   }
   result
+}
+
+municipality_code_crosswalk <- function(refresh = FALSE) {
+  injected <- getOption("projeto_datasus.municipality_crosswalk")
+  if (!is.null(injected)) return(injected)
+  key <- list(
+    schema_version = CACHE_SCHEMA_VERSION,
+    datasusr_version = safe_package_version("datasusr"),
+    geobr_version = safe_package_version("geobr")
+  )
+  cached_call(
+    namespace = "territory-crosswalk",
+    key = key,
+    max_age = 365 * 24 * 60 * 60,
+    refresh = refresh,
+    function_to_run = function() {
+      municipalities <- suppressMessages(
+        geobr::read_municipality(
+          code_muni = "all", year = 2022, simplified = TRUE, output = "sf",
+          showProgress = FALSE, cache = TRUE, verbose = FALSE
+        )
+      )
+      if (is.null(municipalities) || !inherits(municipalities, "sf")) {
+        stop("A correspondência oficial de municípios IBGE não pôde ser carregada.", call. = FALSE)
+      }
+      code7 <- format_integer_code(municipalities$code_muni, 7L)
+      result <- tibble::tibble(
+        code6 = substr(code7, 1L, 6L),
+        code7 = code7,
+        name = as.character(municipalities$name_muni)
+      )
+      result <- result[!is.na(result$code7), , drop = FALSE]
+      if (nrow(result) < 5500L || anyDuplicated(result$code6) || anyDuplicated(result$code7)) {
+        stop("A correspondência territorial oficial está incompleta ou ambígua.", call. = FALSE)
+      }
+      result
+    }
+  )
 }
 
 normalize_geographic_data <- function(data, geo_level) {
@@ -95,8 +130,39 @@ normalize_geographic_data <- function(data, geo_level) {
   normalized
 }
 
-choose_available_year <- function(requested_year, geography) {
-  available <- GEOMETRY_YEARS[[geography]]
+geobr_available_values <- function(kind, refresh = FALSE) {
+  pattern <- switch(
+    kind,
+    state = "state|unidade_da_federacao",
+    municipality = "municip|city",
+    health_region = "health_region|regiao_de_saude",
+    facility = "health_facilit|estabelecimento",
+    stop("Metadado geobr desconhecido.", call. = FALSE)
+  )
+  fallback <- if (kind == "facility") FACILITY_DATE_FALLBACK else GEOMETRY_YEAR_FALLBACK[[kind]]
+  discovered <- tryCatch(
+    cached_call(
+      namespace = "geobr-metadata",
+      key = list(schema_version = CACHE_SCHEMA_VERSION, geobr = safe_package_version("geobr")),
+      max_age = 30 * 24 * 60 * 60,
+      refresh = refresh,
+      function_to_run = function() geobr::list_geobr(wide = FALSE)
+    ),
+    error = function(error) NULL
+  )
+  if (is.null(discovered) || !is.data.frame(discovered)) return(fallback)
+  text <- apply(discovered, 1L, function(row) paste(normalize_text(row), collapse = " "))
+  rows <- grepl(pattern, text)
+  if (!any(rows)) return(fallback)
+  matches <- regmatches(text[rows], gregexpr("(19|20)[0-9]{2}([01][0-9])?", text[rows]))
+  values <- suppressWarnings(as.integer(unique(unlist(matches, use.names = FALSE))))
+  values <- values[is.finite(values)]
+  if (kind == "facility") values <- values[values > 190000L] else values <- values[values < 3000L]
+  if (length(values) == 0L) fallback else sort(unique(values))
+}
+
+choose_available_year <- function(requested_year, geography, refresh = FALSE) {
+  available <- geobr_available_values(geography, refresh)
   if (is.null(available)) stop("Geografia desconhecida.", call. = FALSE)
   requested_year <- as.integer(requested_year)
   before <- available[available <= requested_year]
@@ -106,14 +172,15 @@ choose_available_year <- function(requested_year, geography) {
 
 analysis_reference_year <- function(query, periods = query$periods) {
   years <- query_years(query, periods)
-  if (length(years) == 0L) return(max(GEOMETRY_YEARS[[query$geo_level]]))
+  if (length(years) == 0L) return(max(geobr_available_values(query$geo_level)))
   max(years)
 }
 
 load_geography <- function(query, periods = query$periods, refresh = FALSE) {
   requested <- analysis_reference_year(query, periods)
-  geometry_year <- choose_available_year(requested, query$geo_level)
+  geometry_year <- choose_available_year(requested, query$geo_level, refresh)
   key <- list(
+    schema_version = CACHE_SCHEMA_VERSION,
     geobr_version = safe_package_version("geobr"),
     geo_level = query$geo_level,
     geometry_year = geometry_year,
@@ -241,13 +308,14 @@ period_to_year_month <- function(period_label, period_value = period_label) {
   year * 100L + month
 }
 
-choose_facility_date <- function(query) {
+choose_facility_date <- function(query, refresh = FALSE) {
+  available <- geobr_available_values("facility", refresh)
   period <- latest_period_row(query$periods)
   requested <- period_to_year_month(period$id[[1L]], period$value[[1L]])
-  if (is.na(requested)) return(max(FACILITY_DATES))
-  before <- FACILITY_DATES[FACILITY_DATES <= requested]
+  if (is.na(requested)) return(max(available))
+  before <- available[available <= requested]
   if (length(before) > 0L) return(max(before))
-  min(FACILITY_DATES)
+  min(available)
 }
 
 load_health_facilities <- function(query, facility_type = "all", refresh = FALSE, max_points = 40000L) {
@@ -255,8 +323,9 @@ load_health_facilities <- function(query, facility_type = "all", refresh = FALSE
   if (is.null(query$uf)) {
     stop("Para o mapa de pontos, selecione uma UF para evitar mais de 600 mil registros.", call. = FALSE)
   }
-  facility_date <- choose_facility_date(query)
+  facility_date <- choose_facility_date(query, refresh)
   key <- list(
+    schema_version = CACHE_SCHEMA_VERSION,
     geobr_version = safe_package_version("geobr"),
     date = facility_date,
     uf = query$uf,
@@ -299,6 +368,24 @@ load_health_facilities <- function(query, facility_type = "all", refresh = FALSE
     coordinates[, 2L] >= -35 & coordinates[, 2L] <= 6
   facilities <- facilities[keep_type & keep_active & keep_coordinates, , drop = FALSE]
   facilities$facility_type_code <- type_code[keep_type & keep_active & keep_coordinates]
+  facilities$coordinate_source <- if ("coords_source" %in% names(facilities)) {
+    as.character(facilities$coords_source)
+  } else {
+    "Não informado"
+  }
+  precision_column <- find_column_by_name(
+    facilities, c("precision", "precisao", "coords_precision", "geocode_precision")
+  )
+  facilities$coordinate_precision <- if (is.null(precision_column)) {
+    "Não informada"
+  } else {
+    as.character(facilities[[precision_column]])
+  }
+  facilities$coordinate_quality <- ifelse(
+    normalize_text(facilities$coordinate_source) %in% c("original", "cnes"),
+    "Coordenada original do CNES",
+    "Coordenada derivada/geocodificada"
+  )
 
   if (nrow(facilities) > max_points) {
     stop(

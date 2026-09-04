@@ -4,6 +4,16 @@ O Projeto Data SUS transforma dados públicos de saúde em tabelas, gráficos e 
 
 > **Resumo rápido:** instale o R, baixe este projeto, execute `Rscript prepare_environment.R` e abra o painel. O preparador cuida dos pacotes e das bibliotecas necessárias no Ubuntu ou Debian.
 
+## Escolha seu caminho
+
+| Se você quer... | Comece aqui |
+|---|---|
+| Fazer a primeira análise sem conhecer R ou DATASUS | [Guia de primeiros passos](docs/guia-do-usuario.md) |
+| Instalar e abrir o painel | [Preparação do ambiente](#preparação-do-ambiente) |
+| Entender o significado de SIM, SIH, SIA, SINAN, CNES e SINASC | [Fontes de dados](docs/fontes-de-dados.md) |
+| Conferir fórmulas, taxas e limitações | [Metodologia](docs/metodologia.md) |
+| Desenvolver ou atualizar pacotes | [Pacotes e versões](docs/pacotes-e-versoes.md) |
+
 ## Objetivo do projeto
 
 O objetivo é facilitar perguntas como:
@@ -13,8 +23,10 @@ O objetivo é facilitar perguntas como:
 - Quais procedimentos ambulatoriais aparecem com maior frequência?
 - Onde estão hospitais, unidades de urgência e unidades básicas de saúde?
 - Qual é a taxa por 100 mil habitantes em cada território?
+- Como um território se compara com sua UF ou com o Brasil?
+- Qual é a proporção de prematuridade ou baixo peso entre os nascidos vivos?
 
-O painel reúne cinco fontes principais do SUS:
+O painel reúne seis sistemas principais do SUS, organizados em sete temas:
 
 | Tema no painel | Sistema | O que pode ser analisado |
 |---|---|---|
@@ -24,6 +36,7 @@ O painel reúne cinco fontes principais do SUS:
 | Produção ambulatorial | SIA | Procedimentos e quantidades aprovadas |
 | Agravos de notificação | SINAN | Casos notificados, como dengue |
 | Estrutura assistencial | CNES | Estabelecimentos, leitos, profissionais e equipamentos |
+| Nascidos vivos | SINASC | Nascimentos, parto, gestação e condições ao nascer |
 
 Neste projeto, a palavra **demanda** significa utilização ou produção registrada no SUS. O sistema não mede filas, procura que não virou atendimento nem necessidade de saúde não atendida.
 
@@ -126,6 +139,11 @@ O fluxo normal tem dois botões importantes:
 1. **Carregar opções da fonte:** apresenta o catálogo local auditado de medidas, períodos e filtros, sem depender do TABNET.
 2. **Analisar:** baixa os arquivos DBC necessários, aplica os filtros e monta os resultados.
 
+O nível **Simples** mostra as decisões essenciais. O nível **Avançado** acrescenta
+referência comparativa, método de classificação do mapa, tamanho do ranking e gestão
+do cache. Todas as saídas exibem o significado territorial da fonte, como residência,
+ocorrência, internação ou estabelecimento.
+
 As competências mensais mais recentes podem ser publicadas em datas diferentes para cada sistema ou UF. Se algum arquivo solicitado ainda não existir, a análise para com uma mensagem clara e não entrega um total parcial. Consultas nacionais percorrem as UFs uma por vez e, por isso, aceitam menos períodos que consultas de uma única UF.
 
 ### Exemplo 1: internações por município no Acre
@@ -136,8 +154,8 @@ As competências mensais mais recentes podem ser publicadas em datas diferentes 
 4. Em **Geografia do mapa**, escolha **Município**.
 5. Clique em **Carregar opções da fonte** e aguarde a mensagem verde.
 6. Em **Medida**, escolha **Internações**.
-7. Em **Período(s)**, escolha uma competência disponível, como `Mai/2026`.
-8. Em **Métrica exibida**, mantenha **Total**.
+7. Em **Período(s)**, mantenha um dos períodos mostrados pelo painel.
+8. Em **Métrica exibida**, mantenha **Valor observado**.
 9. Clique em **Analisar**.
 
 A visão geral mostrará o total registrado, o município com maior valor, a série e o ranking. Na aba **Mapas**, cores mais escuras representam valores maiores para a medida selecionada.
@@ -148,7 +166,12 @@ Repita o exemplo anterior, mas escolha **Taxa por 100 mil** antes de clicar em *
 
 Use taxas quando quiser comparar territórios com populações muito diferentes. Um município grande pode ter mais internações em números absolutos, mas um município menor pode ter uma taxa proporcionalmente maior.
 
-As taxas do painel são **brutas**, isto é, não são ajustadas por idade, sexo ou outras diferenças entre as populações.
+As taxas brutas descrevem o recorte sem ajustar sua composição. Para medidas marcadas
+como elegíveis, o modo avançado também oferece padronização direta por idade. Ela usa
+faixas quinquenais, população padrão Brasil 2010 e IC95% gama de Fay–Feuer; se idade ou
+denominador estiver incompleto, a taxa fica ausente em vez de ser estimada silenciosamente.
+Os denominadores municipais por idade estão configurados somente para 2010; nos demais
+anos, a interface informa a limitação e apresenta a taxa bruta quando possível.
 
 ### Exemplo 3: localizar hospitais e unidades mistas
 
@@ -180,6 +203,7 @@ Depois de uma análise, abra **Dados e exportação**. Estão disponíveis:
 - GeoJSON do mapa e dos estabelecimentos;
 - PNG da série, do ranking e do mapa;
 - HTML do mapa interativo;
+- relatório HTML autocontido com filtros, indicadores, qualidade, gráficos, mapa e método;
 - JSON do manifesto da consulta.
 
 O manifesto registra filtros, períodos, versões, fonte, horário e avisos metodológicos. Ele é útil para lembrar exatamente como um resultado foi produzido.
@@ -188,7 +212,8 @@ O manifesto registra filtros, períodos, versões, fonte, horário e avisos meto
 
 ### Como interpretar os mapas
 
-- Uma cor mais escura significa valor maior para a métrica escolhida.
+- Quantis são usados por padrão para impedir que um valor extremo apague as diferenças do restante do mapa.
+- No modo avançado também existem intervalos iguais, escala logarítmica e limites fixos.
 - Zero significa que todos os arquivos esperados foram lidos e não houve registro compatível naquele território; cinza ou **NA** indica valor ou denominador indisponível.
 - Um mapa de totais destaca volume; um mapa de taxas facilita comparação proporcional.
 - Diferença de cor não prova que um lugar tem maior risco. Acesso, registro, encaminhamento e organização dos serviços também influenciam os números.
@@ -200,6 +225,7 @@ O manifesto registra filtros, períodos, versões, fonte, horário e avisos meto
 - O SIA registra produção ambulatorial aprovada, não pessoas únicas.
 - O CNES mostra uma fotografia cadastral de cada competência; meses não são somados no mapa.
 - O SINAN possui regras diferentes para cada agravo.
+- Proporções do SINASC informam quantos registros tinham valor elegível e quantos foram ignorados.
 - Competências recentes podem estar incompletas ou ser revisadas.
 - A disponibilidade de taxa depende de uma contagem válida e de população oficial compatível.
 
@@ -227,10 +253,14 @@ Arquivos DBC públicos e resultados agregados ficam em `data/cache/` para aceler
 
 DBCs e resultados agregados são revalidados após 24 horas. Quando um item já passou desse prazo, o painel tenta consultar a fonte novamente. Se o serviço estiver temporariamente indisponível, o resultado agregado antigo pode ser usado como contingência, sempre com um aviso e com a data do cache. Os mapas de fundo do OpenStreetMap ainda precisam de internet.
 
-Para apagar o cache, feche o sistema e remova o conteúdo da pasta `data/cache/`. A consulta seguinte será baixada novamente.
+Para recalcular uma consulta sem baixar novamente os arquivos DBC, abra o modo
+**Avançado** e clique em **Limpar resultados agregados**. Para apagar absolutamente todo
+o cache, incluindo os DBC, feche o sistema e remova o conteúdo de `data/cache/`; a
+consulta seguinte precisará baixar tudo novamente.
 
 ### Leituras complementares
 
+- [Faça sua primeira análise, passo a passo](docs/guia-do-usuario.md)
 - [Entenda a metodologia](docs/metodologia.md)
 - [Conheça as fontes de dados](docs/fontes-de-dados.md)
 - [Veja como as versões são controladas](docs/pacotes-e-versoes.md)
@@ -284,7 +314,10 @@ A competência mais recente publicada pode ainda não conter registros. O painel
 
 ### 9. Por que não aparece uma taxa?
 
-A medida pode não ser uma contagem, a população pode estar indisponível ou o período pode incluir 2023 sem denominador municipal compatível. Nesse caso, o painel mantém os totais e mostra um aviso.
+A medida pode não aceitar denominador populacional, a população pode estar indisponível
+ou o ano pode não possuir denominador municipal compatível. A padronização por idade
+está configurada somente para 2010. Quando possível, o painel volta à taxa bruta ou ao
+valor observado e mostra um aviso.
 
 ### 10. Uma área cinza no mapa significa zero?
 
